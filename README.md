@@ -13,30 +13,28 @@ RadioNX combines worldwide radio, exploration and personal travel-inspired featu
 ## Screenshots
 
 ### Main Menu
-![Main Menu](docs/screenshots/home.jpg)
+![Main Menu](docs/home.jpg)
 
 ### Your Passport
 Your personal RadioNX passport. Keep track of your listening journey, discover new countries and cities, and collect unique passport stamps along the way.
 
-![Passport](docs/screenshots/passport.jpg)
+![Passport](docs/passport.jpg)
 
 
 ### Explore the World
 An interactive 3D globe lets you explore different parts of the world and discover local radio stations.
 
-![Interactive Globe](docs/screenshots/globe.jpg)
+![Interactive Globe](docs/globe.jpg)
 
 ### Radio Selection
 Choose a city, explore its available radio stations and tune in to something new.
 
-![Radio Stations](docs/screenshots/radio-stations.jpg)
+![Radio Stations](docs/radio-stations.jpg)
+
+![City Postcards](docs/postcards.jpg)
 
 ## Development
 
 RadioNX is currently in development.
 
 New features, visual improvements and interactive experiences are continuously being explored.
-
-**Created by Muveeer**
-
-[GitHub Repository](https://github.com/Muveeer/RadioNX)
