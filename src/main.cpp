@@ -117,7 +117,7 @@ const SDL_Color sphereIn=C(16,19,27), sphereOut=C(5,6,10);
 const SDL_Color nightTint=C(26,30,66), dawnTint=C(18,54,62), dayTint=C(26,29,34), duskTint=C(58,38,20);
 }
 #define RNX_NAME    "RadioNX"
-#define RNX_VERSION "1.0.0"
+#define RNX_VERSION "1.0.1"
 #define RNX_AUTHOR  "Muveeer"
 
 static const char* UA_BROWSER="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
@@ -1966,22 +1966,17 @@ static void frame(Batch& b,float x0,float y0,float w,float h,float r,SDL_Color c
     b.ring(x0+r,y0+r,r,2.f,c,6,(float)M_PI,(float)M_PI*1.5f);
 }
 static void radio(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc){
-<<<<<<< HEAD
-    // The glyph is centred on (x,y) by its real bounding box (antenna waves and
-    // body included), so it sits level with the other card icons.
     float w=s*1.66f,h=s*1.02f;
-    float axr=x+w*.36f;                            // antenna column centre
-    float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;  // vertical bbox centre
+    float axr=x+w*.36f;                            
+    float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;  
     float x0=x-w*.5f,y0=aby-h*.5f+s*.20f;
-    float ay=y0-s*.66f;                            // antenna tip
-=======
+    float ay=y0-s*.66f;                            
 
     float w=s*1.66f,h=s*1.02f;
     float axr=x+w*.36f;                            
     float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;  
     float x0=x-w*.5f,y0=aby-h*.5f+s*.20f;
     float ay=y0-s*.66f;                            
->>>>>>> 12a3463 (Update RadioNX)
     b.line(x0+w*.62f,y0+s*.02f,axr,ay,2.4f,c);
     b.circle(axr,ay,2.8f,acc,8);
     b.ring(axr,ay,s*.34f,1.8f,alpha(acc,140),10,-2.6f,-.5f);
@@ -2008,13 +2003,10 @@ static void passport(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc)
 }
 
 struct HomeMenu {
-<<<<<<< HEAD
-    static constexpr int N=2;                 // "Coming soon" card was removed
-    static constexpr float GAP=300.f;         // horizontal distance between cards
-=======
+    static constexpr int N=2;                
+    static constexpr float GAP=300.f;         
     static constexpr int N=2;                 
     static constexpr float GAP=300.f;         
->>>>>>> 12a3463 (Update RadioNX)
     struct Card {
         float cx=0,cy=0,w=224,h=200,ph=0;
         float lift=0,liftV=0,sc=.93f,scV=0,push=0,pushV=0;
@@ -2028,11 +2020,8 @@ struct HomeMenu {
         const char* nm[N]={"World Passport","Radio"};
         for(int i=0;i<N;i++){
             Card& k=c[i];
-<<<<<<< HEAD
-            k.cx=W/2.f+(i-(N-1)*.5f)*GAP;     // symmetric around the screen centre
-=======
             k.cx=W/2.f+(i-(N-1)*.5f)*GAP;     
->>>>>>> 12a3463 (Update RadioNX)
+            k.cx=W/2.f+(i-(N-1)*.5f)*GAP;     
             k.cy=250.f; k.ph=i*2.1f;
             k.name=nm[i]; k.icon=i;
             k.glow=(i==sel)?1.f:0.f;
