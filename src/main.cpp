@@ -1,6 +1,5 @@
-// RadioNX radio for Nintendo Switch
-// Author: Muveeer
-// Version: 1.0.0
+
+
 #define SWITCH 1
 #include <switch.h>
 #include <sys/stat.h>
@@ -44,7 +43,6 @@ static void logLine(const char* s);
 #define M_PI 3.14159265358979323846
 #endif
 
-// ------------------------------- helpers -----------------------------------
 struct Vec2 { float x=0,y=0; };
 struct Vec3 { float x=0,y=0,z=0; };
 static constexpr float DEG=(float)M_PI/180.f;
@@ -129,7 +127,6 @@ static const char* UA_WIKI=RNX_NAME "/" RNX_VERSION " (Nintendo Switch homebrew 
 static const int BTN_SELECT=SDL_CONTROLLER_BUTTON_B, BTN_BACK=SDL_CONTROLLER_BUTTON_A;
 static const int BTN_FAV   =SDL_CONTROLLER_BUTTON_Y, BTN_RANDOM=SDL_CONTROLLER_BUTTON_X;
 
-// --------------------- streaming JSON cursor (no DOM) ----------------------
 struct J {
     const char* p; const char* e; bool ok=true;
     explicit J(const std::string& s):p(s.data()),e(s.data()+s.size()){}
@@ -232,7 +229,6 @@ static std::string lastSeg(const std::string& url){
     return q==std::string::npos?s:s.substr(0,q);
 }
 
-// ------------------------------- drawing -----------------------------------
 struct Batch {
     std::vector<SDL_Vertex> v; std::vector<int> idx;
     Batch(){ v.reserve(8192); idx.reserve(16384); }
@@ -394,7 +390,6 @@ struct Sky {
     }
 };
 
-// ------------------------------ paths / net --------------------------------
 static std::string gAppDir="./", gCacheDir="./";
 static bool fileExists(const std::string& p){ FILE* f=fopen(p.c_str(),"rb"); if(f){fclose(f);return true;} return false; }
 static bool readFile(const std::string& p,std::string& o){
@@ -462,7 +457,6 @@ static std::string httpGet(const std::string& url,std::string& err,long timeout=
     return out;
 }
 
-// ------------------------------ Radio Garden -------------------------------
 static const char* RG="https://radio.garden/api";
 static std::string rgStream(const std::string& id){ return std::string(RG)+"/ara/content/listen/"+id+"/channel.mp3"; }
 struct Place { std::string id,title,country; float lon=0,lat=0; int size=0; };
@@ -810,7 +804,6 @@ static std::vector<std::vector<Vec2>> fetchLand(std::string& err){
     return out;
 }
 
-// ------------------------------- state -------------------------------------
 struct Fav { std::string chId,title,place,placeId,country,url,cc; float lat=0,lon=0; };
 struct Preset { bool set=false; std::string chId,title,place,placeId,country,url,cc; float lat=0,lon=0; };
 struct State {
@@ -900,7 +893,7 @@ static void loadIdSet(const std::string& file,std::set<std::string>& s){
 static void saveIdSet(const std::string& file,const std::set<std::string>& s){
     std::string o; for(auto& x:s){o+=x;o+='\n';} writeFile(gCacheDir+file,o);
 }
-// Decode JPEG/PNG with stb_image, without FFmpeg. maxDim is the maximum side length.
+
 static bool decodeImageStb(const std::string& body,int maxDim,std::vector<uint8_t>& out,int& ow,int& oh){
     if(body.size()<16||maxDim<=0)return false;
     int w=0,h=0,ch=0;
@@ -961,7 +954,6 @@ static bool decodePNG(const std::string& body,int& w,int& h,std::vector<uint8_t>
     return ok;
 }
 
-// --------------------------------- sfx -------------------------------------
 struct Sfx {
     enum { TICK=1,POP=2,BACK=3,FAV=4,LOCK=5,SWEEP=6,PAGE=7,CHIME=8,STAMP=9 };
     std::atomic<bool> uiOn{true},hissOn{true},muted{false},tuning{false},paused{false};
@@ -1063,7 +1055,7 @@ struct Sfx {
         }
     }
 };
-// -------------------------------- player -----------------------------------
+
 struct Player {
     enum St { STOPPED,BUFFERING,PLAYING,PAUSED,FAILED };
     static constexpr int RATE=48000, CH=2,N=1024;
@@ -1282,7 +1274,6 @@ struct Audio {
     void close(){ if(dev){ SDL_CloseAudioDevice(dev); dev=0; if(player)player->dev=0; } }
 };
 
-// -------------------------------- globe ------------------------------------
 struct Globe {
     float yaw=.5f,pitch=.45f,yawV=0,pitchV=0,R=285,targetR=285;
     Vec2 center{430,372},centerHome{430,372},centerZen{640,348};
@@ -1293,15 +1284,17 @@ struct Globe {
     std::vector<int> order;
     std::vector<std::vector<Vec3>> landv,gridv;
     std::vector<uint8_t> cells;
-    static constexpr int LITN=5;
-    std::vector<SDL_Rect> core[LITN],halo1,halo2;
+    static constexpr int LITN=64;
+    static constexpr int HALON=8;
+    std::vector<SDL_Rect> core[LITN],halo1[HALON],halo2[HALON];
     int nearest=-1,selected=-1; float nearestZ=0;
+    bool selPt=false; Vec3 selV{0,0,0}; Vec2 selP{0,0}; float selZ=-1.f;
     float idle=0,flyYaw=0,flyPitch=0,zoomIdle=0,sunTimer=0,selGlow=0;
     bool dragging=false,flying=false,locked=false,moving=false;
     float cy=1,sy=0,cp=1,sp=0;
     static constexpr float DEF_R=285.f;
     static constexpr float HOME_R=980.f, HOME_CX=640.f, HOME_CY=1450.f;
-    bool home=false;   // Start-menu horizon mode.
+    bool home=false;   
     Vec3 sunV{0,0,1},sunBase{0,0,1},litSun{9,9,9};
     float cYaw=1e9f,cPitch=1e9f,cR=-1,cCx=1e9f,cCy=1e9f; bool projDirty=true;
     SDL_Texture* cache=nullptr; bool cacheValid=false;
@@ -1316,8 +1309,8 @@ struct Globe {
     Vec2 stP0{},stP1{},stC{};
     Globe(){
         cells.resize(640*360);
-        for(int k=0;k<LITN;k++)core[k].reserve(2048);
-        halo1.reserve(1024); halo2.reserve(1024);
+        for(int k=0;k<LITN;k++)core[k].reserve(256);
+        for(int k=0;k<HALON;k++){halo1[k].reserve(256);halo2[k].reserve(256);}
         stNext=frand(20.f,36.f);
     }
     float rimR() const { return R*1.012f; }
@@ -1377,7 +1370,13 @@ struct Globe {
     }
     void setSelected(const std::string& id){
         selected=-1;
-        if(places)for(size_t i=0;i<places->size();i++)if((*places)[i].id==id){selected=(int)i;break;}
+        if(id.empty()||!places)return;
+        for(size_t i=0;i<places->size();i++)
+            if((*places)[i].id==id){selected=(int)i;break;}
+    }
+    void setSelPoint(float lat,float lon,bool on){
+        selPt=on; selZ=-1.f;
+        if(on)selV=ll2v(lon,lat);
     }
     void updRot(){ cy=cosf(yaw);sy=sinf(yaw);cp=cosf(pitch);sp=sinf(pitch); }
     Vec3 rotVec(const Vec3& v) const {
@@ -1584,8 +1583,9 @@ struct Globe {
         center.y=lerpf(center.y,ct.y,ck);
         moving=dragging||flying||home||yawV!=0||pitchV!=0||fabsf(R-targetR)>=.4f
                ||fabsf(center.x-ct.x)>.4f||fabsf(center.y-ct.y)>.4f;
-        selGlow=lerpf(selGlow,selected>=0?1.f:0.f,1-powf(.02f,dt));
+        selGlow=lerpf(selGlow,(selected>=0||selPt)?1.f:0.f,1-powf(.02f,dt));
         updRot(); updateSun(dt); updateLit(); starUpdate(dt);
+        if(selPt){ Vec3 r=rotVec(selV); selZ=r.z; selP={center.x+R*r.x,center.y-R*r.y}; }
         if(projDirty||yaw!=cYaw||pitch!=cPitch||R!=cR||center.x!=cCx||center.y!=cCy){
             cYaw=yaw;cPitch=pitch;cR=R;cCx=center.x;cCy=center.y;projDirty=false;
             nearest=-1; nearestZ=0;
@@ -1632,7 +1632,7 @@ struct Globe {
         Vec3 v{s.y*u.z-s.z*u.y,s.z*u.x-s.x*u.z,s.x*u.y-s.y*u.x};
         float psi=atan2f(s.y,s.x);
         const int NS=44;
-        const float TW=.26f,cT=cosf(TW),sT=sinf(TW);
+        const float TW=.34f,cT=cosf(TW),sT=sinf(TW);
         Vec2 A0[NS+1],AN[NS+1],AD[NS+1],BN[NS+1],BD[NS+1];
         for(int i=0;i<=NS;i++){
             float th=(float)M_PI*i/NS,ct=cosf(th),st=sinf(th);
@@ -1671,6 +1671,22 @@ struct Globe {
         b.flush(r);
         SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_BLEND);
     }
+    static float litPos(float dl){ return clampf((dl+.42f)/.80f,0.f,1.f); }
+
+    static SDL_Color litRamp(float t){
+        struct S{ float t; SDL_Color c; };
+        static const S s[6]={
+            {0.00f,C(255,238,196)},
+            {0.22f,C(255,198,124)},
+            {0.45f,C(214,182,164)},
+            {0.60f,C(168,166,196)},
+            {0.78f,C( 96,142,222)},
+            {1.00f,C( 46,128,255)}
+        };
+        t=clampf(t,0.f,1.f);
+        int i=0; while(i<4&&t>s[i+1].t)++i;
+        return mixc(s[i].c,s[i+1].c,(t-s[i].t)/(s[i+1].t-s[i].t));
+    }
     void drawWire(SDL_Renderer* r,Batch& b,int W,int H,float warm){
         if(sunV.z>-.35f){
             b.gradCircle(center.x+sunV.x*R*.22f,center.y-sunV.y*R*.22f,R*.7f,
@@ -1680,46 +1696,62 @@ struct Globe {
         drawDayNight(r,b);
         for(auto& g:gridv)polyV(r,g,alpha(Pal::wire,26));
         for(auto& l:landv)polyV(r,l,alpha(Pal::wire,90));
-        int shift=2,stride=W>>shift,rows=H>>shift;
-        size_t need=(size_t)stride*rows;
-        if(cells.size()<need)cells.resize(need);
-        memset(cells.data(),0,need);
-        for(int k=0;k<LITN;k++)core[k].clear();
-        halo1.clear(); halo2.clear();
-        float zs=clampf(sqrtf(R/DEF_R),.8f,2.f);
-        if(places){
-            for(int idx:order){
-                if(idx<0||(size_t)idx>=pz.size())continue;
-                if(pz[idx]<=.03f)continue;
-                Vec2 s=pp[idx];
-                if(s.x<0||s.y<0||s.x>=W||s.y>=H)continue;
-                size_t ci=(size_t)((int)s.y>>shift)*stride+((int)s.x>>shift);
-                if(ci>=need||cells[ci])continue;
-                cells[ci]=1;
-                float rr=dotR[idx]*zs; if(rr<.8f)rr=.8f;
-                int d=(int)(rr*2+.5f); if(d<1)d=1;
-                float dl=((size_t)idx<lit.size())?lit[idx]:1.f;
-                int k = dl>.25f?0 : dl>.05f?1 : dl>-.10f?2 : dl>-.35f?3 : 4;
-                core[k].push_back({(int)(s.x-rr),(int)(s.y-rr),d,d});
-                if(k>=3){
-                    int h1=(int)(d*2.0f+.5f); if(h1<3)h1=3;
-                    int h2=(int)(d*3.4f+.5f); if(h2<5)h2=5;
-                    halo1.push_back({(int)s.x-h1/2,(int)s.y-h1/2,h1,h1});
-                    halo2.push_back({(int)s.x-h2/2,(int)s.y-h2/2,h2,h2});
-                }
+    int shift=2,stride=W>>shift,rows=H>>shift;
+    size_t need=(size_t)stride*rows;
+    if(cells.size()<need)cells.resize(need);
+    memset(cells.data(),0,need);
+    for(int k=0;k<LITN;k++)core[k].clear();
+    for(int k=0;k<HALON;k++){halo1[k].clear();halo2[k].clear();}
+    float zs=clampf(sqrtf(R/DEF_R),.8f,2.f);
+    if(places){
+        for(int idx:order){
+            if(idx<0||(size_t)idx>=pz.size())continue;
+            if(pz[idx]<=.03f)continue;
+            Vec2 s=pp[idx];
+            if(s.x<0||s.y<0||s.x>=W||s.y>=H)continue;
+            size_t ci=(size_t)((int)s.y>>shift)*stride+((int)s.x>>shift);
+            if(ci>=need||cells[ci])continue;
+            cells[ci]=1;
+            float rr=dotR[idx]*zs; if(rr<.8f)rr=.8f;
+            int d=(int)(rr*2+.5f); if(d<1)d=1;
+
+            float dl=((size_t)idx<lit.size())?lit[idx]:1.f;
+            float lp=litPos(dl);
+            int k=(int)(lp*(LITN-1)+.5f);
+            if(k<0)k=0; if(k>LITN-1)k=LITN-1;
+            core[k].push_back({(int)(s.x-rr),(int)(s.y-rr),d,d});
+
+            float ng=clampf((.45f-lp)/.45f,0.f,1.f);
+            ng=ng*ng*(3.f-2.f*ng);
+            if(ng>.02f){
+                int hk=(int)(ng*(HALON-1)+.5f);
+                if(hk<1)hk=1; if(hk>HALON-1)hk=HALON-1;
+                int h1=(int)(d*2.0f+.5f); if(h1<3)h1=3;
+                int h2=(int)(d*3.4f+.5f); if(h2<5)h2=5;
+                halo1[hk].push_back({(int)s.x-h1/2,(int)s.y-h1/2,h1,h1});
+                halo2[hk].push_back({(int)s.x-h2/2,(int)s.y-h2/2,h2,h2});
             }
         }
-        SDL_SetRenderDrawColor(r,255,186,110,20);
-        if(!halo2.empty())SDL_RenderFillRects(r,halo2.data(),(int)halo2.size());
-        SDL_SetRenderDrawColor(r,255,214,150,46);
-        if(!halo1.empty())SDL_RenderFillRects(r,halo1.data(),(int)halo1.size());
-        const SDL_Color cc[LITN]={Pal::dot,C(96,142,222),C(196,178,178),C(255,198,124),C(255,238,196)};
-        for(int k=0;k<LITN;k++){
-            if(core[k].empty())continue;
-            SDL_SetRenderDrawColor(r,cc[k].r,cc[k].g,cc[k].b,232);
-            SDL_RenderFillRects(r,core[k].data(),(int)core[k].size());
-        }
-        b.flush(r);
+    }
+    for(int k=1;k<HALON;k++){
+        if(halo2[k].empty())continue;
+        float a=(float)k/(float)(HALON-1);
+        SDL_SetRenderDrawColor(r,255,186,110,(Uint8)(20.f*a+.5f));
+        SDL_RenderFillRects(r,halo2[k].data(),(int)halo2[k].size());
+    }
+    for(int k=1;k<HALON;k++){
+        if(halo1[k].empty())continue;
+        float a=(float)k/(float)(HALON-1);
+        SDL_SetRenderDrawColor(r,255,214,150,(Uint8)(46.f*a+.5f));
+        SDL_RenderFillRects(r,halo1[k].data(),(int)halo1[k].size());
+    }
+    for(int k=0;k<LITN;k++){
+        if(core[k].empty())continue;
+        SDL_Color c=litRamp((float)k/(float)(LITN-1));
+        SDL_SetRenderDrawColor(r,c.r,c.g,c.b,232);
+        SDL_RenderFillRects(r,core[k].data(),(int)core[k].size());
+    }
+    b.flush(r);
     }
     void toTarget(SDL_Renderer* r,Batch& b,SDL_Texture* t){
         b.flush(r);
@@ -1771,14 +1803,17 @@ struct Globe {
             b.glowRing(center.x,center.y,rf*1.03f,rf*1.11f,alpha(gc,(int)(42*a)),alpha(gc,0),72);
             b.glowRing(center.x,center.y,rf*1.11f,rf*1.26f,alpha(gc,(int)(14*a)),alpha(gc,0),56);
         }
-        if(!zen&&!home){            // The center reticle is not needed in the menu.
+        if(!zen&&!home){            
             float breath=.5f+.5f*sinf(t*.9f);
             b.ring(center.x,center.y,26+breath*1.6f,1.4f,alpha(Pal::wire,(int)(96+26*breath)),24);
             for(int k=0;k<4;k++){ float a=k*(float)M_PI/2;
                 b.line(center.x+cosf(a)*32,center.y+sinf(a)*32,center.x+cosf(a)*40,center.y+sinf(a)*40,1.4f,alpha(Pal::wire,110)); }
         }
-        if(selected>=0&&(size_t)selected<pp.size()&&pz[selected]>.02f){
-            Vec2 s=pp[selected];
+        Vec2 sp{0,0}; bool haveSp=false;
+        if(selPt&&selZ>.02f){ sp=selP; haveSp=true; }
+        else if(selected>=0&&(size_t)selected<pp.size()&&pz[selected]>.02f){ sp=pp[selected]; haveSp=true; }
+        if(haveSp){
+            Vec2 s=sp;
             float p=.5f+.5f*sinf(t*.7f);
             float p2=.5f+.5f*sinf(t*.7f-1.05f);
             b.gradCircle(s.x,s.y,26+10*p,alpha(Pal::live,(int)(46+26*p)),alpha(Pal::live,0),24);
@@ -1787,7 +1822,8 @@ struct Globe {
             b.circle(s.x,s.y,3.4f+.7f*p,Pal::liveSoft,12);
             b.circle(s.x,s.y,1.6f,C(255,255,255),8);
         }
-        if(!zen&&!home&&nearest>=0&&nearest!=selected&&(size_t)nearest<pp.size()&&nearestZ>.5f){
+        if(!zen&&!home&&nearest>=0&&nearest!=selected&&(size_t)nearest<pp.size()&&nearestZ>.5f
+           &&!(haveSp&&fabsf(pp[nearest].x-sp.x)+fabsf(pp[nearest].y-sp.y)<14.f)){
             Vec2 s=pp[nearest];
             float p=.5f+.5f*sinf(t*1.1f);
             b.ring(s.x,s.y,9+p*2,1.3f,alpha(Pal::wire,(int)(120+40*p)),18);
@@ -1798,7 +1834,6 @@ struct Globe {
     }
 };
 
-// -------------------------------- fonts ------------------------------------
 static const int FONT_PX[6]={15,17,20,24,30,42};
 enum FontId { F15,F17,F20,F24,F30,F42 };
 static const char* FONT_FILES[6]={"font.ttf","font_cjk.ttf","font_ar.ttf","font_he.ttf","font_th.ttf","font_hi.ttf"};
@@ -1845,7 +1880,6 @@ static unsigned utf8Next(const std::string& s,size_t& i){
     return cp;
 }
 
-// ------------------------- single background worker ------------------------
 struct Worker {
     std::mutex m; std::condition_variable cv;
     std::deque<std::function<void()>> q;
@@ -1919,7 +1953,6 @@ static SDL_Color skyTint(float hour){
     return Pal::dayTint;
 }
 
-// ======================= START MENU (home) ==================================
 namespace HomeIcon {
 static void frame(Batch& b,float x0,float y0,float w,float h,float r,SDL_Color c){
     b.rrect2(x0,y0,w,h,r,r*.8f,alpha(c,14));
@@ -1933,6 +1966,7 @@ static void frame(Batch& b,float x0,float y0,float w,float h,float r,SDL_Color c
     b.ring(x0+r,y0+r,r,2.f,c,6,(float)M_PI,(float)M_PI*1.5f);
 }
 static void radio(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc){
+<<<<<<< HEAD
     // The glyph is centred on (x,y) by its real bounding box (antenna waves and
     // body included), so it sits level with the other card icons.
     float w=s*1.66f,h=s*1.02f;
@@ -1940,6 +1974,14 @@ static void radio(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc){
     float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;  // vertical bbox centre
     float x0=x-w*.5f,y0=aby-h*.5f+s*.20f;
     float ay=y0-s*.66f;                            // antenna tip
+=======
+
+    float w=s*1.66f,h=s*1.02f;
+    float axr=x+w*.36f;                            
+    float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;  
+    float x0=x-w*.5f,y0=aby-h*.5f+s*.20f;
+    float ay=y0-s*.66f;                            
+>>>>>>> 12a3463 (Update RadioNX)
     b.line(x0+w*.62f,y0+s*.02f,axr,ay,2.4f,c);
     b.circle(axr,ay,2.8f,acc,8);
     b.ring(axr,ay,s*.34f,1.8f,alpha(acc,140),10,-2.6f,-.5f);
@@ -1966,8 +2008,13 @@ static void passport(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc)
 }
 
 struct HomeMenu {
+<<<<<<< HEAD
     static constexpr int N=2;                 // "Coming soon" card was removed
     static constexpr float GAP=300.f;         // horizontal distance between cards
+=======
+    static constexpr int N=2;                 
+    static constexpr float GAP=300.f;         
+>>>>>>> 12a3463 (Update RadioNX)
     struct Card {
         float cx=0,cy=0,w=224,h=200,ph=0;
         float lift=0,liftV=0,sc=.93f,scV=0,push=0,pushV=0;
@@ -1981,14 +2028,18 @@ struct HomeMenu {
         const char* nm[N]={"World Passport","Radio"};
         for(int i=0;i<N;i++){
             Card& k=c[i];
+<<<<<<< HEAD
             k.cx=W/2.f+(i-(N-1)*.5f)*GAP;     // symmetric around the screen centre
+=======
+            k.cx=W/2.f+(i-(N-1)*.5f)*GAP;     
+>>>>>>> 12a3463 (Update RadioNX)
             k.cy=250.f; k.ph=i*2.1f;
             k.name=nm[i]; k.icon=i;
             k.glow=(i==sel)?1.f:0.f;
             k.ty=(i<sel)?-.13f:((i>sel)?.13f:0.f);
         }
     }
-    // Semi-implicit spring: k is stiffness, d is velocity retention per second.
+    
     static void spring(float& x,float& v,float tgt,float k,float d,float dt){
         v+=(tgt-x)*k*dt; v*=powf(d,dt); x+=v*dt;
     }
@@ -2011,7 +2062,7 @@ struct HomeMenu {
             k.glow=lerpf(k.glow,on?1.f:0.f,1-powf(.0025f,dt));
         }
     }
-    // Perspective transform of a card-local point (z > 0 means farther away).
+    
     struct Xf {
         float cx,cy,sc,cX,sX,cY,sY,cZ,sZ;
         void set(float cx_,float cy_,float sc_,float ax,float ay,float az){
@@ -2046,7 +2097,6 @@ struct HomeMenu {
     }
 };
 
-// ======================= CITY POSTCARDS =====================================
 static SDL_Color hsv(float h,float s,float v,int a=255){
     h=fmodf(h,360.f); if(h<0)h+=360.f;
     float c=v*s,x=c*(1.f-fabsf(fmodf(h/60.f,2.f)-1.f)),m=v-c,r=0,g=0,b=0;
@@ -2062,7 +2112,7 @@ static uint32_t pcHash(const std::string& s){
 struct Card {
     std::string id,city,country,cc,photoUrl;
     float lat=0,lon=0;
-    int variant=0,photoState=0;      // 0=not searched, 1=found, 2=not found
+    int variant=0,photoState=0;      
     float failT=-1e9f;
     long long ts=0;
 };
@@ -2221,7 +2271,6 @@ static void leaf(Batch& b,float x,float y,float s,SDL_Color c){
 }
 }
 
-// ---- Decode images (PNG/JPEG/WebP) while preserving aspect ratio ----
 static bool decodeImageFit(const std::string& body,int maxDim,std::vector<uint8_t>& out,int& ow,int& oh){
     if(body.size()<64||maxDim<=0)return false;
 	    if(decodeImageStb(body,maxDim,out,ow,oh))return true;
@@ -2289,7 +2338,7 @@ static bool pcGoodPhoto(const std::string& u,const std::string& title){
     for(const char* b:bad)if(s.find(b)!=std::string::npos)return false;
     return true;
 }
-// Use the thumbnail generated by the API; do not upscale manually.
+
 static std::string pcPickThumb(const std::string& body){
     J j(body); if(!j.eat('{'))return "";
     std::string k,best; int bestIdx=99999;
@@ -2408,7 +2457,7 @@ static void ppSave(const Passport& p){
     o+="]}";
     writeFile(gCacheDir+"passport.json",o);
 }
-// ======================= PASSPORT STAMPS ===================================
+
 enum { ST_ENTRY=0 };
 struct Stamp {
     std::string iso,country,city,placeId,station;
@@ -2425,13 +2474,13 @@ struct StampDB {
 struct StampCDef { std::string iso,cont,local; int tpl=0,motif=0,date=0; };
 static const char* ST_C_TBL=
 "jp|AS|3|12|5|入国;cn|AS|2|13|1|入境;kr|AS|0|12|1|입국;tw|AS|3|13|1|入境;hk|AS|2|14|1|入境;"
-"mn|AS|6|36|1|МОНГОЛ;kz|AS|4|23|0|КІРУ;uz|AS|2|45|0|KIRISH;ge|AS|5|40|0|შესვლა;am|AS|5|16|0|ՄՈՒՏՔ;"
+"mn|AS|6|36|1|ИРЭЛТ;kz|AS|4|23|0|КІРУ;uz|AS|2|45|0|KIRISH;ge|AS|5|40|0|შესვლა;am|AS|5|16|0|ՄՈՒՏՔ;"
 "az|AS|4|10|0|GİRİŞ;tr|AS|1|10|0|GİRİŞ;il|AS|0|22|3|כניסה;sa|AS|4|10|4|دخول;ae|AS|4|10|4|دخول;"
 "eg|AS|4|9|4|دخول;ma|AF|4|10|4|دخول;dz|AF|4|10|4|دخول;tn|AF|4|10|4|دخول;ly|AF|4|10|4|دخول;"
 "ir|AS|4|10|4|ورود;iq|AS|4|10|4|دخول;jo|AS|4|9|4|دخول;lb|AS|4|10|4|دخول;sy|AS|4|10|4|دخول;"
 "ye|AS|4|10|4|دخول;om|AS|4|10|4|دخول;qa|AS|4|10|4|دخول;kw|AS|4|10|4|دخول;bh|AS|4|10|4|دخول;"
 "in|AS|2|21|3|प्रवेश;pk|AS|2|10|3|ENTRY;bd|AS|2|17|3|প্রবেশ;lk|AS|1|18|3|ඇතුල්වීම;np|AS|6|16|3|प्रवेश;"
-"bt|AS|6|13|3|ENTRY;mv|AS|0|30|3|ENTRY;af|AS|4|16|3|ENTRY;th|AS|2|13|4|เข้าเมือง;vn|AS|2|13|1|NHẬP CẢNH;"
+"bt|AS|6|13|3|ENTRY;mv|AS|0|30|3|ENTRY;af|AS|4|16|3|ENTRY;th|AS|2|13|6|เข้าเมือง;vn|AS|2|13|1|NHẬP CẢNH;"
 "id|AS|1|30|3|MASUK;my|AS|2|13|3|MASUK;sg|AS|2|14|3|ENTRY;ph|AS|1|30|3|ENTRY;kh|AS|4|45|3|ចូល;"
 "mm|AS|4|13|3|ENTRY;la|AS|4|13|3|ENTRY;bn|AS|4|13|3|MASUK;tl|AS|4|30|3|ENTRY;"
 "de|EU|2|14|0|EINREISE;fr|EU|2|14|0|ENTRÉE;it|EU|2|14|0|INGRESSO;es|EU|2|14|0|ENTRADA;pt|EU|2|14|0|ENTRADA;"
@@ -2440,8 +2489,8 @@ static const char* ST_C_TBL=
 "gr|EU|2|14|0|ΕΙΣΟΔΟΣ;hr|EU|2|14|0|ULAZ;rs|EU|2|14|0|УЛАЗ;ba|EU|2|14|0|ULAZ;si|EU|2|14|0|VSTOP;"
 "mk|EU|2|14|0|ВЛЕЗ;al|EU|2|14|0|HYRJE;me|EU|2|14|0|ULAZ;mt|EU|2|14|0|DĦUL;cy|EU|2|14|0|ΕΙΣΟΔΟΣ;"
 "lu|EU|2|14|0|ENTRÉE;mc|EU|2|14|0|ENTRÉE;ad|EU|2|16|0|ENTRADA;sm|EU|2|14|0|INGRESSO;li|EU|2|14|0|EINREISE;"
-"ru|EU|8|37|0|ПРОПУСК;ua|EU|8|25|0|В'ЇЗД;by|EU|8|25|0|УВОЗ;md|EU|8|14|0|INTRARE;lt|EU|2|26|0|ĮVAŽIAVIMAS;"
-"lv|EU|2|26|0|IECEĻOŠANA;ee|EU|2|26|0|SISSENEMINE;fi|EU|2|31|0|SAAAPUMINEN;se|EU|2|31|0|INRESA;"
+"ru|EU|8|37|0|ПРОПУСК;ua|EU|8|25|0|В'ЇЗД;by|EU|8|25|0|УВАЗД;md|EU|8|14|0|INTRARE;lt|EU|2|26|0|ĮVAŽIAVIMAS;"
+"lv|EU|2|26|0|IECEĻOŠANA;ee|EU|2|26|0|SISENEMINE;fi|EU|2|31|0|SAAPUMINEN;se|EU|2|31|0|INRESA;"
 "no|EU|2|31|0|INNREISE;dk|EU|2|31|0|INDREJSE;is|EU|2|31|0|KOMU;ie|EU|2|26|0|ENTRY;gb|EU|2|14|0|LEAVE TO ENTER;"
 "us|NA|1|24|2|ADMITTED;ca|NA|1|2|2|ADMITTED;mx|NA|0|24|2|ENTRADA;gt|NA|2|29|2|ENTRADA;hn|NA|2|29|2|ENTRADA;"
 "ni|NA|2|29|2|ENTRADA;sv|NA|2|29|2|ENTRADA;cr|NA|2|30|2|ENTRADA;pa|NA|2|32|2|ENTRADA;cu|NA|1|30|2|ENTRADA;"
@@ -2482,10 +2531,70 @@ static const StampCDef& stDef(const std::string& iso){
     return fb;
 }
 static const char* stTypeName(int){ return "ENTRY"; }
-static std::string stPort(const std::string& city){
-    std::string o; for(unsigned char c:city){ if(c>='A'&&c<='Z')o+=(char)c; else if(c>='a'&&c<='z')o+=(char)(c-32); }
-    if(o.size()<3)o=(o+"XXX").substr(0,3);
+static std::string stPort(const std::string& city,const std::string& iso){
+    std::string o;
+    for(unsigned char c:city){ if(c>='A'&&c<='Z')o+=(char)c; else if(c>='a'&&c<='z')o+=(char)(c-32); }
+    if(o.size()<3){
+        for(char c:upperStr(iso)) if(c>='A'&&c<='Z')o+=c;
+        uint32_t h=pcHash(city);
+        while(o.size()<3){ o+=(char)('A'+(h%26)); h/=26; }
+    }
     return o.substr(0,3);
+}
+
+struct StStyle{ int shape; float rx,ry,inner; bool arc; int rings; bool dash,ticks,stars; const char* cap; };
+
+static StStyle stStyle(const Stamp& s,const StampCDef& d){
+    uint32_t h=pcHash("stamp|"+lowerStr(s.iso));
+    StStyle t{};
+    static const int EU[4]={3,1,0,5};   
+    static const int NA[3]={2,3,1};     
+    static const int AS[5]={0,3,1,4,6};
+    static const int SA[4]={3,0,1,7};
+    static const int AF[4]={0,1,3,5};
+    static const int OC[4]={0,3,1,6};
+    static const int UN[5]={0,1,3,4,8};
+    const int* set; int n;
+    if(d.cont=="EU"){set=EU;n=4;} else if(d.cont=="NA"){set=NA;n=3;}
+    else if(d.cont=="AS"){set=AS;n=5;} else if(d.cont=="SA"){set=SA;n=4;}
+    else if(d.cont=="AF"){set=AF;n=4;} else if(d.cont=="OC"){set=OC;n=4;}
+    else {set=UN;n=5;}
+    t.shape=set[(d.tpl+(h>>3))%n];
+    t.rings=1+((h>>7)%2);
+    t.dash=((h>>9)&1)!=0;
+    t.ticks=((h>>11)&1)!=0;
+    t.stars=((h>>13)&1)!=0;
+    static const char* CAP[6]={"IMMIGRATION","BORDER CONTROL","AIRWAVES CONTROL",
+                               "PASSPORT CONTROL","IMMIGRACION","ENTRY CONTROL"};
+    t.cap=CAP[(h>>15)%6];
+    if(d.cont=="SA"&&((h>>19)&1))t.cap="MIGRACIONES";
+    switch(t.shape){
+        case 1: t.rx=1.00f;t.ry=0.74f;t.inner=1.00f;t.arc=true; break;
+        case 2: t.rx=0.86f;t.ry=0.60f;t.inner=1.00f;t.arc=false;break;
+        case 3: t.rx=0.88f;t.ry=0.66f;t.inner=1.00f;t.arc=false;break;
+        case 4: t.rx=0.95f;t.ry=0.90f;t.inner=0.84f;t.arc=true; break;
+        case 5: t.rx=0.95f;t.ry=0.95f;t.inner=0.90f;t.arc=true; break;
+        case 6: t.rx=0.80f;t.ry=0.94f;t.inner=1.00f;t.arc=false;break;
+        case 7: t.rx=0.84f;t.ry=0.92f;t.inner=1.00f;t.arc=false;break;
+        case 8: t.rx=0.98f;t.ry=0.98f;t.inner=0.58f;t.arc=false;break;
+        default:t.rx=1.00f;t.ry=1.00f;t.inner=1.00f;t.arc=true; break;
+    }
+    return t;
+}
+
+static SDL_Color stInk(const Stamp& s,const StampCDef& d){
+    static const SDL_Color P[7][3]={
+        {C(28,32,48),C(38,44,92),C(24,60,96)},    
+        {C(30,32,44),C(150,38,44),C(28,60,88)},   
+        {C(150,38,44),C(28,32,48),C(24,92,62)},   
+        {C(24,92,62),C(58,42,96),C(28,86,96)},    
+        {C(28,32,48),C(24,92,62),C(96,66,40)},    
+        {C(28,86,96),C(30,32,44),C(58,42,96)},    
+        {C(70,72,78),C(28,32,48),C(58,42,96)}     
+    };
+    int r=d.cont=="EU"?0:d.cont=="NA"?1:d.cont=="AS"?2:d.cont=="SA"?3:
+          d.cont=="AF"?4:d.cont=="OC"?5:6;
+    return P[r][((unsigned)s.ink)%3];
 }
 static std::string stDate(const Stamp& s){
     const StampCDef& d=stDef(s.iso);
@@ -2495,7 +2604,8 @@ static std::string stDate(const Stamp& s){
     else if(d.date==2){const char* m[]={"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
         snprintf(b,32,"%s %02d %04d",m[g.tm_mon],g.tm_mday,g.tm_year+1900);}
     else if(d.date==3)snprintf(b,32,"%02d/%02d/%02d",g.tm_mday,g.tm_mon+1,(g.tm_year+1900)%100);
-    else if(d.date==4)snprintf(b,32,"%02d.%02d.%04d",g.tm_mday,g.tm_mon+1,g.tm_year+1900+543);
+    else if(d.date==4)snprintf(b,32,"%02d.%02d.%04d",g.tm_mday,g.tm_mon+1,g.tm_year+1900);
+    else if(d.date==6)snprintf(b,32,"%02d.%02d.%02d",g.tm_mday,g.tm_mon+1,(g.tm_year+1900+543)%100);
     else if(d.date==5){int y=g.tm_year+1900; if(y>=2019)snprintf(b,32,"R%02d.%02d.%02d",y-2018,g.tm_mon+1,g.tm_mday);
         else snprintf(b,32,"H%02d.%02d.%02d",y-1988,g.tm_mon+1,g.tm_mday);}
     else snprintf(b,32,"%02d.%02d.%02d",g.tm_mday,g.tm_mon+1,(g.tm_year+1900)%100);
@@ -2619,7 +2729,6 @@ static PcLay pcLayout(const Card& c){
     return L;
 }
 
-// ---------------------------------- app ------------------------------------
 struct App {
     SDL_Window* win=nullptr; SDL_Renderer* ren=nullptr;
     Batch b; Sky sky; Globe globe; Player player; Audio audio; State state; Fonts fonts;
@@ -2649,6 +2758,7 @@ struct StPlace { int page=0,idx=0; float x=0,y=0,r=0,rot=0; };
 std::vector<StPlace> stPlace;
 bool stLayoutDirty=true;
 int stAnimIdx=-1;
+SDL_Texture* stAnimTex=nullptr; int stAnimTexIdx=-1;
 float stAnimT=0,stShake=0,stMapUntil=0;
 std::string stCur;
 int stSaveAcc=0;
@@ -2943,6 +3053,13 @@ void pollAsync(){
     float panelX(){ return (float)(W-24-PW)+(1-easeOut(panel))*(PW+80); }
     float panelH(){ return now.valid?312.f:(float)(H-84-24); }
     bool isFav(const std::string& id){ for(auto& f:state.favs)if(f.chId==id)return true; return false; }
+    void syncSel(){
+        if(!now.valid){ globe.setSelected(""); globe.setSelPoint(0,0,false); return; }
+        float la=now.lat,lo=now.lon;
+        if(la==0.f&&lo==0.f){ const Place* p=placeById(now.placeId); if(p){la=p->lat;lo=p->lon;} }
+        globe.setSelected("");
+        globe.setSelPoint(la,lo,(la!=0.f||lo!=0.f));
+    }
     void wake(){ idleT=0; if(nightMode){ nightMode=false; audio.sfx.trigger(Sfx::TICK); } }
     void toggleLock(){
         globe.locked=!globe.locked; audio.sfx.trigger(Sfx::LOCK);
@@ -3167,7 +3284,7 @@ if(!sp.miiRgba.empty()&&sp.miiW>0&&sp.miiH>0){
         places.erase(std::remove_if(places.begin(),places.end(),
             [&](const Place& p){return p.id==id;}),places.end());
         globe.buildPlaces();
-        if(!now.placeId.empty())globe.setSelected(now.placeId);
+        syncSel();
     }
     void pollJobs(){
         PlacesRes pr;
@@ -3178,7 +3295,7 @@ if(!sp.miiRgba.empty()&&sp.miiW>0&&sp.miiH>0){
                 placesReady=true; placesError=false;
                 state.placesVer=pr.version; touchState();
                 globe.buildPlaces();
-                if(!now.placeId.empty())globe.setSelected(now.placeId);
+                syncSel();
                 if(!geoAsked){ geoAsked=true; worker.post([this]{ geoSlot.put(fetchGeo()); }); }
                 if(!greeted){
                     greeted=true;
@@ -3243,7 +3360,7 @@ if(!sp.miiRgba.empty()&&sp.miiW>0&&sp.miiH>0){
         if(citySlot.busy.load()){ cityWant=p; cityWantSet=true; }
         curCity=p; cityLoading=true; cityRes=CityRes{}; screen=SCR_CITY;
         rebuildRows(false);
-        globe.flyTo(p.lat,p.lon); globe.setSelected(p.id);
+        globe.flyTo(p.lat,p.lon);
         audio.sfx.trigger(Sfx::POP);
         if(citySlot.busy.exchange(true))return;
         Place cp=p;
@@ -3256,7 +3373,7 @@ if(!sp.miiRgba.empty()&&sp.miiW>0&&sp.miiH>0){
         failNotified=false; tuneAnim=0;
         nowWx=WxRes{}; requestWx(c.lat,c.lon);
         requestFlag(c.cc.empty()?isoForCountry(c.country):c.cc);
-        if(!c.placeId.empty())globe.setSelected(c.placeId);
+        syncSel();
         refreshClocks();
         {
 ppRecord(c);
@@ -3390,9 +3507,9 @@ else if(r.kind==6)pcShow(curCity);
         homeMix=lerpf(homeMix,homeMode?1.f:0.f,1-powf(.0025f,dt));
         home.update(dt,homeMode);
         if(homeMode){
-            globe.yaw+=dt*.018f;      // Slowly rotate the globe
+            globe.yaw+=dt*.018f;      
             globe.idle=0;
-            sky.nextShoot-=dt*1.6f;   // Increase the frequency of shooting stars
+            sky.nextShoot-=dt*1.6f;   
             if(!globe.stOn)globe.stNext-=dt*4.f;
         }
         clockTimer-=dt;
@@ -3404,7 +3521,7 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
         if(sleepMin>0&&sleepLeft>0){
             sleepLeft-=dt;
             if(sleepLeft<=0){
-                sleepLeft=0; sleepMin=0; player.stop(); now.valid=false; globe.selected=-1;
+                sleepLeft=0; sleepMin=0; player.stop(); now.valid=false; globe.setSelected(""); globe.setSelPoint(0,0,false);
                 nightMode=!cleanMode&&!homeMode; toast("Sleep timer ended · good night",Pal::warm);
             }
         }
@@ -3465,7 +3582,7 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
         bool wantMedia=now.valid&&(player.state==Player::PLAYING||player.state==Player::BUFFERING);
         if(wantMedia!=mediaOn){ mediaOn=wantMedia; appletSetMediaPlaybackState(mediaOn); }
     }
-    // ---------------------------- START MENU (home) ----------------------------
+    
     void enterRadio(){
         if(!homeMode)return;
         homeMode=false; home.latch=false;
@@ -3590,16 +3707,11 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
             b.flush(ren);
             int ly=(int)(cy+h*.5f*sc+30.f);
             txt(F24,k.name,(int)cx,ly,alpha(mixc(Pal::dim,Pal::text,k.glow),A2(255)),true,1);
-            if(k.glow>.03f){
-                int uw=tw(F24,k.name,true);
-                b.line(cx-uw*.5f,(float)ly+30,cx+uw*.5f,(float)ly+30,2.f,alpha(Pal::accent,A2(220)));
-                b.flush(ren);
-            }
             hit(H_HOME,(int)(cx-w*.5f*sc),(int)(cy-h*.5f*sc),(int)(w*sc),(int)(h*sc+40),i);
         }
         txt(F15,"A · select        ← → · switch",W/2,432,alpha(Pal::faint,AL(105)),false,1);
     }
-    // Postcard: RAM-only; opened from a city or station.
+    
 void pcFreePhoto(){ if(pcPhoto.tex){SDL_DestroyTexture(pcPhoto.tex);pcPhoto.tex=nullptr;} pcPhoto.w=pcPhoto.h=0; }
 void pcShow(const Place& p){
     Card c; c.id=p.id; c.city=p.title; c.country=p.country; c.cc=isoForCountry(p.country);
@@ -3653,7 +3765,7 @@ void pcUpdate(float dt){
         }
     }
 }
-// Passport data.
+
 void ppEnsure(){
     bool ch=false;
     if(pp.number.empty()){ char nb[16];
@@ -3740,7 +3852,7 @@ void spacedCenter(const std::string& s,float cx,float y,int fi,float tr,SDL_Colo
     float w=(float)tw(fi,s,true)+tr*(float)(s.empty()?0:(int)s.size()-1);
     pcSpaced(s,cx-w*.5f,y,fi,tr,c);
 }
-// Avatar; draw and animate the built-in avatar when no Mii image is available.
+
 void drawAvatar(float x,float y,float s){
     uint32_t sd=(uint32_t)(ppSeed^(ppSeed>>32));
     const SDL_Color skin[5]={C(255,226,198),C(246,210,178),C(226,186,152),C(198,154,120),C(162,118,90)};
@@ -3775,7 +3887,7 @@ void drawHologram(float cx,float cy){
         b.ring(cx,cy,16.f-k*4.f,2.2f,alpha(hsv(fmodf(t*40.f+k*120.f,360.f),.65f,.95f),85),20,t*.7f+k,t*.7f+k+4.6f);
     b.circle(cx+cosf(t*1.3f)*10.f,cy+sinf(t*1.3f)*10.f,2.2f,alpha(C(255,255,255),200),8);
 }
-// Cover, rendered once to a texture.
+
 void drawAvatarLive(float x,float y,float s,float a){
     if(a<.98f)return;
     if(miiTex){
@@ -3828,9 +3940,7 @@ void buildCover(){
     SDL_SetRenderTarget(ren,nullptr);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
 }
-// Left page: photo, name, number, and MRZ.
-// Page contents, rendered to a 424x536 texture.
-// ---------------- stamps: motifs ----------------
+
 void stMotif(Batch& bb,int id,float x,float y,float s,SDL_Color c){
     auto L=[&](float a,float b,float d,float e,float th){bb.line(x+a*s,y+b*s,x+d*s,y+e*s,th,c);};
     auto Ci=[&](float a,float b,float r){bb.circle(x+a*s,y+b*s,r*s,c,10);};
@@ -3890,31 +4000,109 @@ void stMotif(Batch& bb,int id,float x,float y,float s,SDL_Color c){
     default: R(0,0,.35f); L(-.35f,0,.35f,0,1.2f); bb.ring(x,y,s*.17f,1.2f,c,10); break;
     }
 }
-// ---------------- stamps: bake ----------------
-void stArc(const std::string& s,float cx,float cy,float r,bool bottom,int fi,SDL_Color c){
-    if(s.empty())return;
-    std::vector<std::string> g; std::vector<float> w; float tot=0;
-    for(size_t i=0;i<s.size();){size_t st=i;utf8Next(s,i);std::string ch=s.substr(st,i-st);
-        float ww=(float)tw(fi,ch,true);g.push_back(ch);w.push_back(ww);tot+=ww;}
-    float span=tot/r; if(span>2.6f)span=2.6f;
-    float a=bottom?(1.5708f+span*.5f):(-1.5708f-span*.5f);
+
+struct StItem{ int kind; std::string t; int fi; float w,h; }; 
+
+void stTextSize(int fi,const std::string& s,float& w,float& h){
+    w=h=0.f;
+    for(const Run& r:runs(fi,s)){
+        TTF_Font* f=fonts.get(fi,r.fam); if(!f)continue;
+        TTF_SetFontStyle(f,TTF_STYLE_BOLD);
+        int ww=0,hh=0;
+        if(TTF_SizeUTF8(f,r.text.c_str(),&ww,&hh)!=0)continue;
+        w+=(float)ww; h=std::max(h,(float)hh);
+    }
+}
+
+float stLineFit(const std::string& s,int fi,float cx,float cy,float maxW,float maxH,SDL_Color c){
+    if(s.empty()||maxW<2.f||maxH<2.f)return 0.f;
+    struct P{ TTF_Font* f; std::string t; float w,h; };
+    std::vector<P> ps; float W=0,H=0;
+    for(const Run& r:runs(fi,s)){
+        TTF_Font* f=fonts.get(fi,r.fam); if(!f)continue;
+        TTF_SetFontStyle(f,TTF_STYLE_BOLD);
+        int w=0,h=0;
+        if(TTF_SizeUTF8(f,r.text.c_str(),&w,&h)!=0||w<=0)continue;
+        ps.push_back(P{f,r.text,(float)w,(float)h});
+        W+=(float)w; H=std::max(H,(float)h);
+    }
+    if(ps.empty())return 0.f;
+    float k=std::min(1.f,std::min(maxW/W,maxH/H));
+    float x=cx-W*k*.5f;
+    for(const P& p:ps){
+        SDL_Surface* su=TTF_RenderUTF8_Blended(p.f,p.t.c_str(),c);
+        if(su){
+            SDL_Texture* tx=SDL_CreateTextureFromSurface(ren,su);
+            if(tx){
+                SDL_Rect d{(int)floorf(x),(int)floorf(cy-p.h*k*.5f),
+                           (int)ceilf(p.w*k),(int)ceilf(p.h*k)};
+                SDL_RenderCopy(ren,tx,nullptr,&d);
+                SDL_DestroyTexture(tx);
+            }
+            SDL_FreeSurface(su);
+        }
+        x+=p.w*k;
+    }
+    return H*k;
+}
+
+void stArcFit(const std::string& s,float cx,float cy,float rx,float ry,
+              float spanMax,bool bottom,int fi,SDL_Color c,float maxH)
+{
+    if(s.empty()||rx<3.f||ry<3.f||spanMax<.1f||maxH<3.f)return;
+    struct G{ TTF_Font* f; std::string t; float w,h; };
+    std::vector<G> gs; float W=0,H=0;
+    size_t i=0;
+    while(i<s.size()){
+        size_t st=i; unsigned cp=utf8Next(s,i);
+        std::string ch=s.substr(st,i-st);
+        TTF_Font* f=fonts.get(fi,fonts.famFor(cp,fi)); if(!f)continue;
+        TTF_SetFontStyle(f,TTF_STYLE_BOLD);
+        int w=0,h=0; TTF_SizeUTF8(f,ch.c_str(),&w,&h);
+        if(h<=0)continue;
+        if(w<=0)w=(int)(h*.35f);
+        gs.push_back(G{f,ch,(float)w,(float)h});
+        W+=(float)w; H=std::max(H,(float)h);
+    }
+    if(gs.empty()||W<=0.f)return;
+    float track=H*.08f;
+    auto speed=[&](float a){
+        float sa=sinf(a),ca=cosf(a);
+        return std::max(2.f,sqrtf(rx*rx*sa*sa+ry*ry*ca*ca));
+    };
+    auto measure=[&](float k){
+        float a=bottom?(float)M_PI*.5f:-(float)M_PI*.5f;
+        float dir=bottom?-1.f:1.f,used=0.f;
+        for(size_t q=0;q<gs.size();q++){
+            float adv=(gs[q].w+(q+1<gs.size()?track:0.f))*k;
+            float da=adv/speed(a+dir*adv*.5f/speed(a));
+            a+=dir*da; used+=da;
+        }
+        return used;
+    };
+    float k=std::min(1.f,maxH/H);
+    float span=measure(k);
+    if(span>spanMax){ k*=spanMax/span; span=measure(k); }
+    if(span>spanMax){ k*=spanMax/span; span=measure(k); }
+    if(k<.3f)return;
+    float a=bottom?((float)M_PI*.5f+span*.5f):(-(float)M_PI*.5f-span*.5f);
     float dir=bottom?-1.f:1.f;
-    for(size_t k=0;k<g.size();k++){
-        float da=(w[k]/tot)*span;
-        float ang=a+dir*da*.5f;
-        unsigned cp=0; {size_t z=0;cp=utf8Next(g[k],z);}
-        int fam=fonts.famFor(cp,fi);
-        TTF_Font* f=fonts.get(fi,fam);
-        if(f){
-            TTF_SetFontStyle(f,TTF_STYLE_BOLD);
-            SDL_Surface* su=TTF_RenderUTF8_Blended(f,g[k].c_str(),c);
+    for(size_t q=0;q<gs.size();q++){
+        const G& g=gs[q];
+        float adv=(g.w+(q+1<gs.size()?track:0.f))*k;
+        float da=adv/speed(a+dir*adv*.5f/speed(a));
+        float mid=a+dir*da*.5f;
+        if(g.t!=" "){
+            SDL_Surface* su=TTF_RenderUTF8_Blended(g.f,g.t.c_str(),c);
             if(su){
                 SDL_Texture* tx=SDL_CreateTextureFromSurface(ren,su);
                 if(tx){
-                    float px=cx+cosf(ang)*r,py=cy+sinf(ang)*r;
-                    SDL_Rect d{(int)(px-su->w*.5f),(int)(py-su->h*.5f),su->w,su->h};
-                    double rot=(ang*180.f/(float)M_PI)+90.f+(bottom?180.f:0.f);
-                    SDL_RenderCopyEx(ren,tx,nullptr,&d,rot,nullptr,SDL_FLIP_NONE);
+                    float px=cx+cosf(mid)*rx,py=cy+sinf(mid)*ry;
+                    float dw=std::max(1.f,g.w*k),dh=std::max(1.f,g.h*k);
+                    SDL_Rect d{(int)floorf(px-dw*.5f),(int)floorf(py-dh*.5f),
+                               (int)ceilf(dw),(int)ceilf(dh)};
+                    SDL_RenderCopyEx(ren,tx,nullptr,&d,mid*180.0/M_PI+90.0+(bottom?180.0:0.0),
+                                     nullptr,SDL_FLIP_NONE);
                     SDL_DestroyTexture(tx);
                 }
                 SDL_FreeSurface(su);
@@ -3922,6 +4110,52 @@ void stArc(const std::string& s,float cx,float cy,float r,bool bottom,int fi,SDL
         }
         a+=dir*da;
     }
+}
+
+void stStack(std::vector<StItem>& it,float cx,float cy,float maxW,float maxH,
+             float size,SDL_Color ink,int motif,SDL_Texture* ov)
+{
+    if(it.empty())return;
+    float gap=size*.016f,H=gap*(float)(it.size()-1),W=0;
+    for(const StItem& q:it){ H+=q.h; W=std::max(W,q.w); }
+    if(H<=0.f||W<=0.f)return;
+    float k=std::min(1.f,std::min(maxW/W,maxH/H));
+    float y=cy-H*k*.5f;
+    for(const StItem& q:it){
+        float h=q.h*k;
+        if(q.kind==0) stLineFit(q.t,q.fi,cx,y+h*.5f,maxW,h,ink);
+        else if(q.kind==1){
+            if(ov){
+                float mr=h*.5f;
+                SDL_Rect dd{(int)(cx-mr),(int)(y+h*.5f-mr),(int)(mr*2),(int)(mr*2)};
+                SDL_RenderCopy(ren,ov,nullptr,&dd);
+            } else stMotif(b,motif,cx,y+h*.5f,h*1.05f,ink);
+            b.flush(ren);
+        } else {
+            float lw=std::min(maxW,q.w*k);
+            b.line(cx-lw*.5f,y+h*.5f,cx+lw*.5f,y+h*.5f,std::max(1.f,size*.006f),alpha(ink,170));
+            b.flush(ren);
+        }
+        y+=(q.h+gap)*k;
+    }
+}
+
+std::string stCountryLabel(const Stamp& s,int fi,float maxW){
+    std::string n=upperStr(trimStr(s.country.empty()?s.iso:s.country));
+    if(n.rfind("N:",0)==0)n=trimStr(n.substr(2));
+    if(n.empty())n=upperStr(s.iso);
+    if((float)tw(fi,n,true)<=maxW)return n;
+    static const char* A[5]={" AND ","REPUBLIC OF ","THE ","FEDERATION","REPUBLIC"};
+    static const char* B[5]={" & ","","","FED.","REP."};
+    for(int i=0;i<5;i++){
+        size_t p;
+        while((p=n.find(A[i]))!=std::string::npos)n.replace(p,strlen(A[i]),B[i]);
+        n=trimStr(n);
+        if((float)tw(fi,n,true)<=maxW)return n;
+    }
+    if((float)tw(fi,n,true)<=maxW*1.3f)return n;      
+    if(s.iso.size()>=2&&s.iso.rfind("n:",0)!=0)return upperStr(s.iso);
+    return n;
 }
 SDL_Texture* stOverride(const std::string& iso){
     auto it=stOvr.find(iso); if(it!=stOvr.end())return it->second;
@@ -3948,66 +4182,145 @@ SDL_Texture* stBake(const Stamp& s,int size){
     b.flush(ren);
     SDL_SetRenderTarget(ren,tgt);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(ren,0,0,0,0); SDL_RenderClear(ren);
+    SDL_SetRenderDrawColor(ren,0,0,0,0);
+    SDL_RenderClear(ren);
+
     const StampCDef& d=stDef(s.iso);
-    float sc=size/192.f,cx=size*.5f,cy=size*.5f,r=size*.42f;
-    int fi=size>=320?F24:(size>=240?F20:F15);
-    SDL_Color ink;
-    int pal=s.ink%7;
-    if(pal==0)ink=C(28,32,48); else if(pal==1)ink=C(58,42,96); else if(pal==2)ink=C(150,38,44);
-    else if(pal==3)ink=C(24,92,62); else if(pal==4)ink=C(28,86,96); else if(pal==5)ink=C(96,66,40);
-    else ink=C(70,72,78);
-    auto ellipse=[&](float rx,float ry,float th,int seg=48){
-        for(int i=0;i<seg;i++){float a0=6.283f*i/seg,a1=6.283f*(i+1)/seg;
-            b.line(cx+cosf(a0)*rx,cy+sinf(a0)*ry,cx+cosf(a1)*rx,cy+sinf(a1)*ry,th,ink);}
+    StStyle sy=stStyle(s,d);
+    uint32_t hs=pcHash("stamp|"+lowerStr(s.iso));
+    SDL_Color ink=stInk(s,d);
+    float u=size/192.f, cx=size*.5f, cy=size*.5f, R=size*.44f;
+    float rx=R*sy.rx, ry=R*sy.ry, bw=std::max(1.3f,2.3f*u);
+
+    auto ell=[&](float AX,float AY,float th,int seg){
+        for(int i=0;i<seg;i++){
+            float a0=2*(float)M_PI*i/seg,a1=2*(float)M_PI*(i+1)/seg;
+            b.line(cx+cosf(a0)*AX,cy+sinf(a0)*AY,cx+cosf(a1)*AX,cy+sinf(a1)*AY,th,ink);
+        }
     };
-    auto poly=[&](int n,float rr,float rot){
-        for(int i=0;i<n;i++){float a0=rot+6.283f*i/n,a1=rot+6.283f*(i+1)/n;
-            b.line(cx+cosf(a0)*rr,cy+sinf(a0)*rr,cx+cosf(a1)*rr,cy+sinf(a1)*rr,2.4f*sc,ink);}
+    auto poly=[&](int n,float AX,float AY,float rot,float th){
+        for(int i=0;i<n;i++){
+            float a0=rot+2*(float)M_PI*i/n,a1=rot+2*(float)M_PI*(i+1)/n;
+            b.line(cx+cosf(a0)*AX,cy+sinf(a0)*AY,cx+cosf(a1)*AX,cy+sinf(a1)*AY,th,ink);
+        }
     };
-    int sh=d.tpl%8;
-    bool rect=(sh==2||sh==3);
-    if(sh==0){b.ring(cx,cy,r,2.6f*sc,ink,48);b.ring(cx,cy,r*.86f,1.4f*sc,ink,44);}
-    else if(sh==1)ellipse(r,r*.72f,2.6f*sc);
-    else if(sh==2){
-        b.line(cx-r,cy-r*.7f,cx+r,cy-r*.7f,2.4f*sc,ink);b.line(cx-r,cy+r*.7f,cx+r,cy+r*.7f,2.4f*sc,ink);
-        b.line(cx-r,cy-r*.7f,cx-r,cy+r*.7f,2.4f*sc,ink);b.line(cx+r,cy-r*.7f,cx+r,cy+r*.7f,2.4f*sc,ink);}
-    else if(sh==3){
-        float cr=12*sc;
-        b.line(cx-r+cr,cy-r*.75f,cx+r-cr,cy-r*.75f,2.4f*sc,ink);
-        b.line(cx-r+cr,cy+r*.75f,cx+r-cr,cy+r*.75f,2.4f*sc,ink);
-        b.line(cx-r,cy-r*.75f+cr,cx-r,cy+r*.75f-cr,2.4f*sc,ink);
-        b.line(cx+r,cy-r*.75f+cr,cx+r,cy+r*.75f-cr,2.4f*sc,ink);
-        b.ring(cx-r+cr,cy-r*.75f+cr,cr,2.4f*sc,ink,8,(float)M_PI,(float)M_PI*1.5f);
-        b.ring(cx+r-cr,cy-r*.75f+cr,cr,2.4f*sc,ink,8,(float)M_PI*1.5f,(float)M_PI*2);
-        b.ring(cx+r-cr,cy+r*.75f-cr,cr,2.4f*sc,ink,8,0.f,(float)M_PI*.5f);
-        b.ring(cx-r+cr,cy+r*.75f-cr,cr,2.4f*sc,ink,8,(float)M_PI*.5f,(float)M_PI);}
-    else if(sh==4){ellipse(r,r*.8f,2.6f*sc);b.line(cx-r,cy+r*.3f,cx+r,cy+r*.3f,2.f*sc,ink);}
-    else if(sh==5)poly(6,r,-1.57f);
-    else if(sh==6)poly(6,r*.95f,0);
-    else poly(3,r,-1.57f);
-    b.flush(ren);
-    std::string country=upperStr(s.country.empty()?s.iso:s.country);
-    if(country.rfind("N:",0)==0)country=country.substr(2);
-    std::string word=d.local.empty()?"ENTRY":d.local;
-    char line[64]; snprintf(line,64,"%s · %s",stPort(s.city).c_str(),stDate(s).c_str());
-    float my,ml,md,mr;
-    if(rect){
-        txt(fi,trunc(fi,country,(int)(r*1.55f),true),(int)cx,(int)(cy-r*.62f),ink,true,1);
-        my=cy-r*.125f; mr=r*.18f; ml=cy+r*.125f; md=cy+r*.40f;
-    } else {
-        stArc(country,cx,cy,r*.78f,false,fi,ink);
-        stArc("AIRWAVES BORDER CONTROL",cx,cy,r*.78f,true,fi,ink);
-        my=cy-r*.18f; mr=r*.20f; ml=cy+r*.10f; md=cy+r*.38f;
+    auto boxf=[&](float AX,float AY,float cr,float th){
+        if(cr<=.5f){
+            b.line(cx-AX,cy-AY,cx+AX,cy-AY,th,ink); b.line(cx-AX,cy+AY,cx+AX,cy+AY,th,ink);
+            b.line(cx-AX,cy-AY,cx-AX,cy+AY,th,ink); b.line(cx+AX,cy-AY,cx+AX,cy+AY,th,ink);
+            return;
+        }
+        cr=std::min(cr,std::min(AX,AY));
+        b.line(cx-AX+cr,cy-AY,cx+AX-cr,cy-AY,th,ink);
+        b.line(cx-AX+cr,cy+AY,cx+AX-cr,cy+AY,th,ink);
+        b.line(cx-AX,cy-AY+cr,cx-AX,cy+AY-cr,th,ink);
+        b.line(cx+AX,cy-AY+cr,cx+AX,cy+AY-cr,th,ink);
+        const float qx[4]={cx+AX-cr,cx+AX-cr,cx-AX+cr,cx-AX+cr};
+        const float qy[4]={cy-AY+cr,cy+AY-cr,cy+AY-cr,cy-AY+cr};
+        const float qa[4]={-(float)M_PI*.5f,0.f,(float)M_PI*.5f,(float)M_PI};
+        for(int k=0;k<4;k++)for(int i=0;i<6;i++){
+            float t0=qa[k]+(float)M_PI*.5f*i/6,t1=qa[k]+(float)M_PI*.5f*(i+1)/6;
+            b.line(qx[k]+cosf(t0)*cr,qy[k]+sinf(t0)*cr,qx[k]+cosf(t1)*cr,qy[k]+sinf(t1)*cr,th,ink);
+        }
+    };
+    auto frame=[&](float k,float th){
+        float AX=rx*k,AY=ry*k;
+        switch(sy.shape){
+            case 1: ell(AX,AY,th,64); break;
+            case 2: boxf(AX,AY,0.f,th); break;
+            case 3: boxf(AX,AY,std::min(AX,AY)*.28f,th); break;
+            case 4: poly(6,AX,AY,-(float)M_PI*.5f,th); break;
+            case 5: poly(8,AX,AY,(float)M_PI/8,th); break;
+            case 6: {
+                float ty=cy-AY+AX;
+                b.line(cx-AX,cy+AY,cx+AX,cy+AY,th,ink);
+                b.line(cx-AX,cy+AY,cx-AX,ty,th,ink);
+                b.line(cx+AX,cy+AY,cx+AX,ty,th,ink);
+                for(int i=0;i<24;i++){
+                    float a0=(float)M_PI+(float)M_PI*i/24,a1=(float)M_PI+(float)M_PI*(i+1)/24;
+                    b.line(cx+cosf(a0)*AX,ty+sinf(a0)*AX,cx+cosf(a1)*AX,ty+sinf(a1)*AX,th,ink);
+                }
+            } break;
+            case 7: {
+                b.line(cx-AX,cy-AY,cx+AX,cy-AY,th,ink);
+                b.line(cx-AX,cy-AY,cx-AX,cy+AY*.25f,th,ink);
+                b.line(cx+AX,cy-AY,cx+AX,cy+AY*.25f,th,ink);
+                for(int i=0;i<14;i++){
+                    float t0=(float)i/14,t1=(float)(i+1)/14;
+                    float x0=cx-AX*(1-t0),y0=cy+AY*.25f+AY*.75f*t0*t0;
+                    float x1=cx-AX*(1-t1),y1=cy+AY*.25f+AY*.75f*t1*t1;
+                    b.line(x0,y0,x1,y1,th,ink);
+                    b.line(2*cx-x0,y0,2*cx-x1,y1,th,ink);
+                }
+            } break;
+            case 8: poly(4,AX,AY,-(float)M_PI*.5f,th); break;
+            default: ell(AX,AY,th,72); break;
+        }
+    };
+    frame(1.f,bw);
+    if(sy.rings>1)frame(.90f,bw*.55f);
+    if(sy.dash){
+        float AX=rx*.955f,AY=ry*.955f;
+        for(int i=0;i<48;i+=2){
+            float a0=2*(float)M_PI*i/48,a1=2*(float)M_PI*(i+.7f)/48;
+            b.line(cx+cosf(a0)*AX,cy+sinf(a0)*AY,cx+cosf(a1)*AX,cy+sinf(a1)*AY,bw*.5f,ink);
+        }
     }
-    SDL_Texture* ov=stOverride(s.iso);
-    if(ov){SDL_Rect dd{(int)(cx-mr),(int)(my-mr),(int)(mr*2),(int)(mr*2)};
-        SDL_RenderCopy(ren,ov,nullptr,&dd);}
-    else stMotif(b,d.motif,cx,my,mr,ink);
+    if(sy.ticks){
+        for(int i=0;i<60;i++){
+            float a=2*(float)M_PI*i/60;
+            b.line(cx+cosf(a)*rx*.93f,cy+sinf(a)*ry*.93f,
+                   cx+cosf(a)*rx*.985f,cy+sinf(a)*ry*.985f,bw*.42f,alpha(ink,150));
+        }
+    }
     b.flush(ren);
-    txt(fi,trunc(fi,word,(int)(r*1.4f),true),(int)cx,(int)ml,ink,true,1);
-    txt(fi,trunc(fi,line,(int)(r*1.55f),true),(int)cx,(int)md,ink,true,1);
+
+    std::string iso=lowerStr(s.iso);
+    if(iso.rfind("n:",0)==0)iso="rnx";
+    std::string code=upperStr(iso);
+    char serial[32]; snprintf(serial,sizeof serial,"%s %04u",code.c_str(),(unsigned)(s.seed%10000));
+    std::string word=d.local.empty()?"ENTRY":d.local;
+    { float w,h; stTextSize(F20,word,w,h); if(w<=0.f)word="ENTRY"; }
+    std::string line=stPort(s.city,s.iso)+" · "+stDate(s);
+    int fw=size>=300?F24:(size>=230?F20:F17), fd=F15;
+    int motif=d.motif;
+    if(motif<=1){ static const int M[12]={2,3,6,9,11,12,16,19,22,26,30,38}; motif=M[(hs>>21)%12]; }
+    SDL_Texture* ov=stOverride(iso);
+
+    if(sy.arc){
+        float ax=rx*.80f*sy.inner, ay=ry*.80f*sy.inner;
+        std::string ctry=stCountryLabel(s,fw,(ax+ay)*.5f*2.0f*.92f);
+        stArcFit(ctry,cx,cy,ax,ay,2.0f,false,fw,ink,ry*.17f);
+        stArcFit(std::string(sy.cap)+" · "+code,cx,cy,ax,ay,1.70f,true,fd,alpha(ink,235),ry*.13f);
+        if(sy.stars){
+            stMotif(b,22,cx+ax,cy,ry*.11f,ink);
+            stMotif(b,22,cx-ax,cy,ry*.11f,ink);
+        }
+        b.flush(ren);
+        float BW=rx*1.30f*sy.inner, BH=ry*.62f*sy.inner, BCY=cy+ry*.03f, mh=BH*.30f;
+        std::vector<StItem> it;
+        it.push_back(StItem{1,"",0,mh,mh});
+        { float w,h; stTextSize(fw,word,w,h); it.push_back(StItem{0,word,fw,w,h}); }
+        { float w,h; stTextSize(fd,line,w,h); it.push_back(StItem{0,line,fd,w,h}); }
+        stStack(it,cx,BCY,BW,BH,size,ink,motif,ov);
+    } else {
+        float x0=cx-rx*.86f,x1=cx+rx*.86f,y0=cy-ry*.78f,y1=cy+ry*.78f;
+        if(sy.shape==6){ y0=cy-ry+rx*.60f; y1=cy+ry*.80f; }
+        if(sy.shape==7){ y0=cy-ry*.76f;    y1=cy+ry*.20f; }
+        if(sy.shape==8){ x0=cx-rx*.48f; x1=cx+rx*.48f; y0=cy-ry*.48f; y1=cy+ry*.48f; }
+        float BW=x1-x0,BH=y1-y0,BCY=(y0+y1)*.5f;
+        std::string ctry=stCountryLabel(s,fw,BW*.98f);
+        std::vector<StItem> it;
+        { float w,h; stTextSize(fw,ctry,w,h); it.push_back(StItem{0,ctry,fw,w,h}); }
+        it.push_back(StItem{2,"",0,BW*.8f,std::max(1.f,size*.007f)});
+        { float mh=BH*.20f; it.push_back(StItem{1,"",0,mh,mh}); }
+        { float w,h; stTextSize(fw,word,w,h); it.push_back(StItem{0,word,fw,w,h}); }
+        { float w,h; stTextSize(fd,line,w,h); it.push_back(StItem{0,line,fd,w,h}); }
+        { float w,h; stTextSize(fd,serial,w,h); it.push_back(StItem{0,serial,fd,w,h}); }
+        stStack(it,cx,BCY,BW,BH,size,ink,motif,ov);
+    }
     b.flush(ren);
+
     std::vector<uint8_t> px((size_t)size*size*4);
     int rp=SDL_RenderReadPixels(ren,nullptr,SDL_PIXELFORMAT_RGBA32,px.data(),size*4);
     SDL_SetRenderTarget(ren,prev);
@@ -4019,13 +4332,15 @@ SDL_Texture* stBake(const Stamp& s,int size){
         size_t i=((size_t)y*size+x)*4;
         if(px[i+3]==0)continue;
         uint32_t n=sd^(uint32_t)(x*374761393u+y*668265263u);
-        n=(n^(n>>13))*1274126177u;n^=n>>16;
+        n=(n^(n>>13))*1274126177u; n^=n>>16;
         float noise=(n%1000)/1000.f;
         float press=.78f+.22f*clampf(.5f+((x-size*.5f)*dx+(y-size*.5f)*dy)/(size*.5f),0.f,1.f);
         float a=px[i+3]/255.f;
         bool edge=false;
-        if(x>0&&px[i-1]==0)edge=true; if(x<size-1&&px[i+7]==0)edge=true;
-        if(y>0&&px[i-size*4+3]==0)edge=true; if(y<size-1&&px[i+size*4+3]==0)edge=true;
+        if(x>0&&px[i-1]==0)edge=true;
+        if(x<size-1&&px[i+7]==0)edge=true;
+        if(y>0&&px[i-size*4+3]==0)edge=true;
+        if(y<size-1&&px[i+size*4+3]==0)edge=true;
         if(noise<(edge?.26f:.10f))a*=.45f+.5f*noise;
         a*=press; if(a>.94f)a=.94f;
         px[i+3]=(Uint8)(a*245);
@@ -4035,7 +4350,7 @@ SDL_Texture* stBake(const Stamp& s,int size){
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
     return out;
 }
-// ---------------- stamps: layout / pages ----------------
+
 int stPageCount(){
     int mx=1;
     for(auto& p:stPlace)mx=std::max(mx,p.page);
@@ -4051,7 +4366,7 @@ void stRebuildLayout(){
     auto fit=[&](float x,float y,float r){
         if(x-r<26||x+r>398||y-r<76||y+r>492)return false;
         for(auto& p:cur){float dx=x-p.x,dy=y-p.y,rr=r+p.r;
-            if(dx*dx+dy*dy<rr*rr*.78f)return false;}
+            if(dx*dx+dy*dy<rr*rr*1.02f)return false;}
         return true;
     };
     for(int i=0;i<(int)stamps.v.size();i++){
@@ -4059,7 +4374,7 @@ void stRebuildLayout(){
         float r=72;
         uint32_t sd=s.seed;
         StPlace p; p.page=page; p.idx=i; p.r=r;
-p.rot=((sd%500)/100.f-2.5f)*DEG;
+p.rot=((sd%1800)/100.f-9.f)*DEG;
         bool placed=false;
         if(!placed){
             for(int q=0;q<90;q++){
@@ -4124,7 +4439,12 @@ void stTick(float dt){
 void stAnimUpdate(float dt){
     if(stAnimIdx>=0){
         stAnimT+=dt/.55f;
-        if(stAnimT>=1.f){stAnimIdx=-1;stAnimT=0;stInvalidate();}
+        if(stAnimT>=1.f){
+            stAnimIdx=-1; stAnimT=0;
+            if(stAnimTex){SDL_DestroyTexture(stAnimTex);stAnimTex=nullptr;}
+            stAnimTexIdx=-1;
+            stInvalidate();
+        }
     }
     stShake=std::max(0.f,stShake-dt*2.4f);
 }
@@ -4139,7 +4459,7 @@ void stDrawVisa(int idx){
         if(p.idx<0||p.idx>=(int)stamps.v.size())continue;
         SDL_Texture* tx=stBake(stamps.v[p.idx],256);
         if(!tx)continue;
-        int d=(int)(p.r*2.3f);
+        int d=(int)(p.r*2.1f);
         SDL_Rect dst{(int)(p.x-d*.5f),(int)(p.y-d*.5f),d,d};
         SDL_SetTextureAlphaMod(tx,232);
         SDL_RenderCopyEx(ren,tx,nullptr,&dst,p.rot*180.f/(float)M_PI,nullptr,SDL_FLIP_NONE);
@@ -4286,7 +4606,7 @@ void ensurePage(int idx){
         }
     }
 }
-// --- Passport opening and page turns ---
+
 void drawPassport(){
     if(passportMix<.01f)return;
     if(stLayoutDirty)stRebuildLayout();
@@ -4362,15 +4682,19 @@ void drawPassport(){
                     int pg=p.page;
                     if(pg!=2*s&&pg!=2*s+1)continue;
                     float px=(pg==2*s)?spine-pw:spine;
-                    SDL_Texture* tx=stBake(stamps.v[p.idx],256);
+                    if(stAnimTexIdx!=p.idx){
+                        if(stAnimTex)SDL_DestroyTexture(stAnimTex);
+                        stAnimTex=stBake(stamps.v[p.idx],256);
+                        stAnimTexIdx=p.idx;
+                    }
+                    SDL_Texture* tx=stAnimTex;
                     if(tx){
                         float u=easeOut(clampf(stAnimT,0.f,1.f));
                         float sc=1.6f-.6f*u;
-                        int d=(int)(p.r*2.3f*sc);
+                        int d=(int)(p.r*2.1f*sc);
                         SDL_Rect dst{(int)(px+p.x-d*.5f),(int)(y0+p.y-d*.5f-(1.f-u)*90.f),d,d};
                         SDL_SetTextureAlphaMod(tx,(Uint8)(230*u));
                         SDL_RenderCopyEx(ren,tx,nullptr,&dst,(p.rot+(1.f-u)*.05f)*180.f/(float)M_PI,nullptr,SDL_FLIP_NONE);
-                        SDL_DestroyTexture(tx);
                         for(int k=0;k<8;k++){
                             float a=k*.785f+stAnimT*2.f;
                             float rr=p.r*(.6f+stAnimT*.8f);
@@ -4431,7 +4755,7 @@ void drawPassport(){
     }
     chip2(640-84,656,168,42,H_PP_BACK,"B · CLOSE",true);
 }
-    // ---------- typography ----------
+    
     void pcTitle(const std::string& s,float x,float y,int fi,int maxW,SDL_Color ink,SDL_Color sh,float phase){
         auto measure=[&](int ff,float tr,const std::string& str){
             float w=0; size_t i=0;
@@ -4456,7 +4780,7 @@ void drawPassport(){
         while(i<s.size()){ size_t st=i; utf8Next(s,i); std::string ch=s.substr(st,i-st);
             txt(fi,ch,(int)cx,(int)y,c,true); cx+=tw(fi,ch,true)+tr; }
     }
-    // The illustrated postcard is always available, even offline, and uses flag colors.
+    
     void pcArt(const SDL_Rect& r,const PcTheme& th,const Card& c){
         SDL_RenderSetClipRect(ren,&r);
         uint32_t hh=pcHash(c.id);
@@ -4465,11 +4789,11 @@ void drawPassport(){
         SDL_Color sky1=mixc(th.a2,C(255,255,255),.55f);
         SDL_Color sky2=mixc(th.paper,th.a1,.10f);
         b.gradRect(RX,RY,RW,RH,alpha(sky1,255),alpha(sky2,255));
-        // Sun.
+        
         float sx=RX+RW*(.20f+(hh%45)/100.f),sy=RY+RH*.24f;
         b.gradCircle(sx,sy,RH*.20f,alpha(mixc(th.a2,C(255,255,255),.6f),120),alpha(th.a2,0),22);
         b.circle(sx,sy,RH*.055f,alpha(mixc(C(255,252,240),th.a2,.25f),245),18);
-        // Clouds.
+        
         for(int i=0;i<3;i++){
             float cx=RX+RW*(.15f+((hh>>(i*3))%70)/100.f),cy=RY+RH*(.14f+.10f*i),s=RH*(.035f+.012f*i);
             SDL_Color cc2=alpha(C(255,255,255),150-i*25);
@@ -4477,7 +4801,7 @@ void drawPassport(){
             b.circle(cx-s*.9f,cy+s*.2f,s*.7f,cc2,12);
             b.quad(cx-s*1.6f,cy,cx+s*1.6f,cy,cx+s*1.6f,cy+s*.7f,cx-s*1.6f,cy+s*.7f,cc2);
         }
-        if(scene==0){                                   // Mountains and lake.
+        if(scene==0){                                   
             float base=RY+RH*.66f;
             for(int k=0;k<3;k++){
                 SDL_Color col=alpha(mixc(th.a1,C(255,255,255),.35f-.16f*k),255);
@@ -4499,7 +4823,7 @@ void drawPassport(){
                 float xx=RX+RW*.5f-ww*.5f+RW*.12f*sinf(i*1.3f);
                 b.line(xx,yy,xx+ww,yy,2.f,alpha(C(255,255,255),110-i*10));
             }
-        } else if(scene==1){                            // Skyline and water.
+        } else if(scene==1){                            
             float base=RY+RH*.74f,bw=RW/13.f;
             for(int i=0;i<13;i++){
                 uint32_t v=pcHash(c.id+std::to_string(i*7));
@@ -4518,7 +4842,7 @@ void drawPassport(){
                 float yy=base+RH*.04f*(i+1);
                 b.line(RX+RW*.08f,yy,RX+RW*.92f,yy,1.6f,alpha(C(255,255,255),70-i*8));
             }
-        } else {                                        // Hills and birds.
+        } else {                                        
             for(int k=0;k<3;k++){
                 float base=RY+RH*(.58f+.13f*k),amp=RH*(.09f-.02f*k);
                 SDL_Color col=alpha(mixc(th.a1,C(255,255,255),.30f-.14f*k),255);
@@ -4753,7 +5077,6 @@ void pcBuildFace(const Card& c){
 
     b.flush(ren);
 
-    // Photo / fallback illustration.
     SDL_Rect pr{
         (int)(ox+L.photo.x),
         (int)(oy+L.photo.y),
@@ -4790,7 +5113,6 @@ if(pcPhoto.tex){
     b.line((float)(pr.x+pr.w),(float)pr.y,(float)(pr.x+pr.w),(float)(pr.y+pr.h),2,alpha(th.ink,80));
     b.flush(ren);
 
-    // Postage stamp.
     float sx=ox+L.stampX;
     float sy=oy+L.stampY;
     float sw=L.stampW;
@@ -4813,7 +5135,6 @@ if(pcPhoto.tex){
     drawFlag(sx+6,sy+7,sw-12,sh-26,c.cc,c.country);
     txt(F15,"NX",(int)(sx+sw/2),(int)(sy+sh-18),alpha(th.ink,200),true,1);
 
-    // Cancellation mark.
     tm dt=tmLocal((time_t)c.ts);
     char ds[16];
     snprintf(ds,16,"%02d.%02d.%02d",dt.tm_mday,dt.tm_mon+1,(dt.tm_year+1900)%100);
@@ -4827,7 +5148,6 @@ if(pcPhoto.tex){
 
     txt(F15,ds,(int)mx,(int)my-8,alpha(th.at,215),true,1);
 
-    // Text: city and country only.
     float tx=ox+L.tx;
 
     pcTitle(c.city,
@@ -4851,7 +5171,7 @@ if(pcPhoto.tex){
     SDL_SetRenderTarget(ren,nullptr);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
 }
-// ---------- open postcard ----------
+
 void drawPostcard(){
     if(pcMix<.01f||!pcCurValid)return;
     const Card& c=pcCur;
@@ -5271,7 +5591,7 @@ if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
             }
         }
         if(hA>.02f){
-            if(hA>=.55f)drawToasts(112.f);   // Toasts are drawn by the block above during transitions to avoid duplicates
+            if(hA>=.55f)drawToasts(112.f);   
             if(!placesReady)
                 txt(F15,placesError?"map unavailable":"loading map…",24,76,alpha(Pal::faint,(int)(190*hA)));
             if(now.valid){
@@ -5414,6 +5734,7 @@ void run(){
     void shutdown(){
 stLeave();
 stSave(stamps);
+if(stAnimTex){SDL_DestroyTexture(stAnimTex);stAnimTex=nullptr;}
 for(auto& kv:stOvr)if(kv.second)SDL_DestroyTexture(kv.second);
 stOvr.clear();
 ppSave(pp);
@@ -5434,7 +5755,6 @@ if(miiTex){SDL_DestroyTexture(miiTex);miiTex=nullptr;}
     }
 };
 
-// --------------------------------- main ------------------------------------
 static void logLine(const char* s){
     FILE* f=fopen((gCacheDir+"log.txt").c_str(),"a");
     if(!f)return; fprintf(f,"%s\n",s); fclose(f);
