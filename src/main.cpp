@@ -1933,11 +1933,17 @@ static void frame(Batch& b,float x0,float y0,float w,float h,float r,SDL_Color c
     b.ring(x0+r,y0+r,r,2.f,c,6,(float)M_PI,(float)M_PI*1.5f);
 }
 static void radio(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc){
-    float w=s*1.66f,h=s*1.02f,x0=x-w/2,y0=y-h/2+s*.20f;
-    b.line(x0+w*.62f,y0+s*.02f,x0+w*.86f,y0-s*.66f,2.4f,c);
-    b.circle(x0+w*.86f,y0-s*.66f,2.8f,acc,8);
-    b.ring(x0+w*.86f,y0-s*.66f,s*.34f,1.8f,alpha(acc,140),10,-2.6f,-.5f);
-    b.ring(x0+w*.86f,y0-s*.66f,s*.54f,1.6f,alpha(acc,80),10,-2.6f,-.5f);
+    // The glyph is centred on (x,y) by its real bounding box (antenna waves and
+    // body included), so it sits level with the other card icons.
+    float w=s*1.66f,h=s*1.02f;
+    float axr=x+w*.36f;                            // antenna column centre
+    float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;  // vertical bbox centre
+    float x0=x-w*.5f,y0=aby-h*.5f+s*.20f;
+    float ay=y0-s*.66f;                            // antenna tip
+    b.line(x0+w*.62f,y0+s*.02f,axr,ay,2.4f,c);
+    b.circle(axr,ay,2.8f,acc,8);
+    b.ring(axr,ay,s*.34f,1.8f,alpha(acc,140),10,-2.6f,-.5f);
+    b.ring(axr,ay,s*.54f,1.6f,alpha(acc,80),10,-2.6f,-.5f);
     frame(b,x0,y0,w,h,s*.16f,c);
     for(int i=0;i<4;i++){ float xx=x0+s*.24f+i*s*.15f;
         b.line(xx,y0+s*.24f,xx,y0+h-s*.24f,2.f,alpha(c,140)); }
@@ -1957,40 +1963,27 @@ static void passport(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc)
     b.line(x-s*.28f,y+s*.44f,x+s*.34f,y+s*.44f,2.f,alpha(c,150));
     b.line(x-s*.28f,y+s*.62f,x+s*.14f,y+s*.62f,2.f,alpha(c,100));
 }
-static void spark(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc){
-    int base=b.vert(x,y,alpha(acc,210)),first=-1,prev=-1;
-    for(int i=0;i<8;i++){
-        float a=-(float)M_PI/2+i*(float)M_PI/4,rr=(i%2==0)?s*.90f:s*.20f;
-        int id=b.vert(x+cosf(a)*rr,y+sinf(a)*rr,alpha(acc,i%2?140:230));
-        if(first<0)first=id;
-        if(prev>=0)b.tri(base,prev,id);
-        prev=id;
-    }
-    b.tri(base,prev,first);
-    b.circle(x,y,s*.13f,alpha(C(255,255,255),200),8);
-    b.circle(x+s*.64f,y-s*.60f,s*.07f,alpha(c,160),6);
-    b.circle(x-s*.60f,y+s*.54f,s*.05f,alpha(c,120),6);
-}
 }
 
 struct HomeMenu {
-    static constexpr int N=3;
+    static constexpr int N=2;                 // "Coming soon" card was removed
+    static constexpr float GAP=300.f;         // horizontal distance between cards
     struct Card {
         float cx=0,cy=0,w=224,h=200,ph=0;
         float lift=0,liftV=0,sc=.93f,scV=0,push=0,pushV=0;
         float tx=0,txV=0,ty=0,tyV=0,glow=0;
-        const char* name=""; const char* sub=""; int icon=0;
+        const char* name=""; int icon=0;
     };
     Card c[N];
     int sel=1; float intro=0; bool latch=false;
 
     void init(){
-        const char* nm[N]={"World Passport","Radio","Coming soon"};
-        const char* sb[N]={"your traveler ID","live worldwide air","free slot"};
+        const char* nm[N]={"World Passport","Radio"};
         for(int i=0;i<N;i++){
             Card& k=c[i];
-            k.cx=W/2.f+(i-1)*340.f; k.cy=250.f; k.ph=i*2.1f;
-            k.name=nm[i]; k.sub=sb[i]; k.icon=i;
+            k.cx=W/2.f+(i-(N-1)*.5f)*GAP;     // symmetric around the screen centre
+            k.cy=250.f; k.ph=i*2.1f;
+            k.name=nm[i]; k.icon=i;
             k.glow=(i==sel)?1.f:0.f;
             k.ty=(i<sel)?-.13f:((i>sel)?.13f:0.f);
         }
@@ -3492,8 +3485,6 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
     void homeActivate(){
         if(home.sel==0){ openPassport(); return; }
         if(home.sel==1){ enterRadio(); return; }
-        audio.sfx.trigger(Sfx::BACK);
-        toast("This slot is free · coming soon",Pal::warm);
     }
     void drawAurora(float A){
         if(A<.02f)return;
@@ -3596,7 +3587,6 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
             SDL_Color ac=alpha(mixc(Pal::faint,Pal::accentSoft,k.glow),A2(255));
             if(k.icon==0)HomeIcon::passport(b,ix,iy,is,ic,ac);
             else if(k.icon==1)HomeIcon::radio(b,ix,iy,is,ic,ac);
-            else HomeIcon::spark(b,ix,iy,is,ic,ac);
             b.flush(ren);
             int ly=(int)(cy+h*.5f*sc+30.f);
             txt(F24,k.name,(int)cx,ly,alpha(mixc(Pal::dim,Pal::text,k.glow),A2(255)),true,1);
