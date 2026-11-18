@@ -1,1 +1,9 @@
-(empty output)
+build/
+*.o
+*.d
+*.elf
+*.nro
+*.nacp
+*.map
+.DS_Store
+Thumbs.db
