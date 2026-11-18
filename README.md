@@ -2,30 +2,94 @@
 
 ### Discover the world through radio.
 
-RadioNX is a free internet radio app for Nintendo Switch. It lets you tune in to radio stations from all over the world.
+[![Platform](https://img.shields.io/badge/Platform-Nintendo%20Switch-red?logo=nintendoswitch)](https://www.nintendo.com/)
+[![License](https://img.shields.io/github/license/Muveeer/RadioNX)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/Muveeer/RadioNX?include_prereleases)](https://github.com/Muveeer/RadioNX/releases)
+[![Development](https://img.shields.io/badge/Status-In%20Development-blue)](https://github.com/Muveeer/RadioNX)
 
-Spin an interactive 3D globe, pick a city, and listen to local radio. Every station is a quick trip somewhere new.
+**RadioNX** is a free internet radio homebrew application for Nintendo Switch, bringing together worldwide radio, interactive exploration and a unique travel-inspired experience.
+
+Explore an interactive 3D globe, discover radio stations from cities around the world, and tune in to local broadcasts. Every station is a new destination.
+
+---
+
+## Features
+
+- **Interactive 3D Globe** — Explore the world, rotate the globe and discover radio stations by location.
+- **Worldwide Radio** — Listen to radio stations from cities and countries around the globe.
+- **Station Search** — Find radio stations and cities using the built-in search.
+- **Random Discovery** — Let RadioNX take you somewhere unexpected with a random station.
+- **World Passport** — Your personal listening passport with travel records, statistics and collectible country stamps.
+- **City Postcards** — Discover visual postcards from the places you explore.
+- **Favorites** — Save stations you enjoy and return to them anytime.
+- **Presets** — Keep up to six stations for quick access.
+- **Listening History** — Revisit your recently played stations.
+- **Local Time & Weather** — See local time and weather information for the currently selected station location.
+- **Audio Experience** — Enjoy live playback visualization, track information and customizable sound settings.
+- **Night Mode** — Automatic night-time interface mode and a distraction-free Clean Mode.
 
 ---
 
 ## Screenshots
 
 ### Main Menu
-![Main Menu](docs/home.jpg)
 
-### Your Passport
-Your personal RadioNX passport. Track the cities and countries you listen to, and collect stamps as you explore.
+Your starting point. Choose between your World Passport and the radio experience.
 
-![Passport](docs/passport.jpg)
+![RadioNX Main Menu](docs/home.jpg)
 
-### Explore the World
-Spin the 3D globe to look around the world and find local stations.
+### World Passport
+
+A personal passport that documents your journey through the world of radio.
+
+Track your listening activity, discover new countries and cities, and collect unique entry stamps as you explore.
+
+![World Passport](docs/passport.jpg)
+
+### Explore the Globe
+
+An interactive 3D globe with radio destinations from around the world. Rotate it, explore different regions and discover local stations.
 
 ![Interactive Globe](docs/globe.jpg)
 
-### Radio Selection
-Pick a city, browse its stations, and start listening.
+### Radio Stations
 
-![Radio Stations](docs/radio-stations.jpg)
+Choose a city, browse its available radio stations and tune in to local broadcasts.
+
+![Radio Station Selection](docs/radio-stations.jpg)
+
+### City Postcards
+
+Discover places around the world through visual city postcards.
 
 ![City Postcards](docs/postcards.jpg)
+
+---
+
+### Additional Controls
+
+- Hold **− and +** together to toggle Clean Mode.
+
+---
+
+## Development
+
+RadioNX is an independent homebrew project currently in development.
+
+New features, improvements and visual refinements are continuously being worked on.
+
+Suggestions, feedback and bug reports are welcome through [GitHub Issues](https://github.com/Muveeer/RadioNX/issues).
+
+---
+
+## License
+
+See [LICENSE](LICENSE) for the license covering this project.
+
+Third-party libraries, fonts and other assets remain subject to their respective licenses.
+
+---
+
+**Created by Muveeer**
+
+[GitHub Repository](https://github.com/Muveeer/RadioNX) · [Releases](https://github.com/Muveeer/RadioNX/releases) · [Issues](https://github.com/Muveeer/RadioNX/issues)
