@@ -7,9 +7,11 @@
 [![Latest Release](https://img.shields.io/github/v/release/Muveeer/RadioNX?include_prereleases)](https://github.com/Muveeer/RadioNX/releases)
 [![Development](https://img.shields.io/badge/Status-In%20Development-blue)](https://github.com/Muveeer/RadioNX)
 
-**RadioNX** is a free internet radio homebrew application for Nintendo Switch, bringing together worldwide radio, interactive exploration and a unique travel-inspired experience.
+**RadioNX** is a free internet radio homebrew application for Nintendo Switch, combining worldwide radio, GTA radio stations, interactive exploration and a travel-inspired experience.
 
-Explore an interactive 3D globe, discover radio stations from cities around the world, and tune in to local broadcasts. Every station is a new destination.
+Explore an interactive 3D globe, discover radio stations from cities around the world, listen to broadcasts from Grand Theft Auto games and collect memories of your listening journey.
+
+Every station is a new destination.
 
 ---
 
@@ -17,6 +19,7 @@ Explore an interactive 3D globe, discover radio stations from cities around the 
 
 - **Interactive 3D Globe** — Explore the world, rotate the globe and discover radio stations by location.
 - **Worldwide Radio** — Listen to radio stations from cities and countries around the globe.
+- **GTA Radio** — Listen to radio stations from Grand Theft Auto games. Streams are sourced from [GTARadio.net](https://gtaradio.net).
 - **Station Search** — Find radio stations and cities using the built-in search.
 - **Random Discovery** — Let RadioNX take you somewhere unexpected with a random station.
 - **World Passport** — Your personal listening passport with travel records, statistics and collectible country stamps.
@@ -66,7 +69,7 @@ Discover places around the world through visual city postcards.
 
 ---
 
-### Additional Controls
+## Additional Controls
 
 - Hold **− and +** together to toggle Clean Mode.
 
@@ -79,6 +82,16 @@ RadioNX is an independent homebrew project currently in development.
 New features, improvements and visual refinements are continuously being worked on.
 
 Suggestions, feedback and bug reports are welcome through [GitHub Issues](https://github.com/Muveeer/RadioNX/issues).
+
+---
+
+## Credits & Third-Party Sources
+
+- **[GTARadio.net](https://gtaradio.net)** — Source of the GTA Radio streams used in RadioNX.
+
+RadioNX is an independent project and is not affiliated with or endorsed by GTARadio.net, Rockstar Games or Take-Two Interactive.
+
+Grand Theft Auto and related trademarks belong to their respective owners. Music and other third-party content remain the property of their respective rights holders.
 
 ---
 
