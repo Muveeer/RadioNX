@@ -1,5 +1,5 @@
-
 .SUFFIXES:
+.DEFAULT_GOAL := all
 
 ifeq ($(strip $(DEVKITPRO)),)
 $(error "DEVKITPRO not set - open devkitPro MSYS2")
@@ -16,12 +16,12 @@ INCLUDES :=
 
 APP_TITLE   := RadioNX
 APP_AUTHOR  := Muveeer
-APP_VERSION := 1.0.0
+APP_VERSION := 2.0.0
 ICON        := icon.jpg
 
 export APP_TITLE   := RadioNX
 export APP_AUTHOR  := Muveeer
-export APP_VERSION := 1.0.0
+export APP_VERSION := 2.0.0
 export APP_ICON    := $(TOPDIR)/icon.jpg
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
@@ -67,13 +67,23 @@ ifneq ($(ROMFS),)
 	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean $(BUILD)
+.PHONY: all clean $(BUILD) assets
 
 all: $(BUILD)
 
-$(BUILD):
+$(BUILD): assets
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+
+assets:
+	@echo syncing GTA assets ...
+	@mkdir -p $(CURDIR)/$(ROMFS)/gta
+	@cp -r $(CURDIR)/RadioNX_assets/gta/catalog.json $(CURDIR)/$(ROMFS)/gta/
+	@cp -r $(CURDIR)/RadioNX_assets/gta/covers   $(CURDIR)/$(ROMFS)/gta/
+	@cp -r $(CURDIR)/RadioNX_assets/gta/stations $(CURDIR)/$(ROMFS)/gta/
+	@cp -r $(CURDIR)/RadioNX_assets/gta/games    $(CURDIR)/$(ROMFS)/gta/
+	@cp -r $(CURDIR)/RadioNX_assets/gta/fonts    $(CURDIR)/$(ROMFS)/gta/
+	@cp -r $(CURDIR)/RadioNX_assets/gta/sfx      $(CURDIR)/$(ROMFS)/gta/
 
 clean:
 	@echo clean ...
@@ -89,7 +99,9 @@ $(OUTPUT).nacp:
 	@echo creating ... $(notdir $@)
 	nacptool --create "RadioNX" "Muveeer" "1.0.0" $@
 
-$(OUTPUT).nro: $(OUTPUT).elf $(OUTPUT).nacp
+ROMFS_FILES := $(shell find $(TOPDIR)/$(ROMFS) -type f 2>/dev/null)
+
+$(OUTPUT).nro: $(OUTPUT).elf $(OUTPUT).nacp $(ROMFS_FILES)
 	@echo built ... $(notdir $@)
 	elf2nro $< $@ --icon=$(TOPDIR)/icon.jpg --nacp=$(OUTPUT).nacp $(NROFLAGS)
 

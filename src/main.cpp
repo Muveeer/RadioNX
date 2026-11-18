@@ -34,6 +34,7 @@ extern "C" {
 #include <ctime>
 #include <cctype>
 #include <cstdint>
+#include <climits>
 #include <algorithm>
 #include <random>
 #define STB_IMAGE_IMPLEMENTATION
@@ -117,7 +118,7 @@ const SDL_Color sphereIn=C(16,19,27), sphereOut=C(5,6,10);
 const SDL_Color nightTint=C(26,30,66), dawnTint=C(18,54,62), dayTint=C(26,29,34), duskTint=C(58,38,20);
 }
 #define RNX_NAME    "RadioNX"
-#define RNX_VERSION "1.0.1"
+#define RNX_VERSION "1.0.0"
 #define RNX_AUTHOR  "Muveeer"
 
 static const char* UA_BROWSER="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
@@ -314,12 +315,6 @@ void heart(Batch& b,float x,float y,float s,SDL_Color c,bool fill){
         b.ring(x+s*.25f,y-s*.18f,s*.3f,2,c,8,(float)M_PI,2*(float)M_PI); } }
 void search(Batch& b,float x,float y,float s,SDL_Color c){
     b.ring(x-s*.12f,y-s*.12f,s*.42f,2.2f,c,14); b.line(x+s*.2f,y+s*.2f,x+s*.55f,y+s*.55f,2.4f,c); }
-void lock(Batch& b,float x,float y,float s,SDL_Color c,bool closed){
-    b.rrect(x-s*.5f,y-s*.1f,s,s*.75f,s*.14f,c);
-    float ox=closed?0.f:s*.28f;
-    b.ring(x+ox,y-s*.22f,s*.3f,1.9f,c,10,(float)M_PI,2*(float)M_PI);
-    b.line(x+ox-s*.3f,y-s*.22f,x+ox-s*.3f,y-s*.08f,1.9f,c);
-    b.line(x+ox+s*.3f,y-s*.22f,x+ox+s*.3f,y-s*.08f,1.9f,c); }
 void back(Batch& b,float x,float y,float s,SDL_Color c){
     b.line(x+s*.3f,y-s*.45f,x-s*.25f,y,2.4f,c); b.line(x-s*.25f,y,x+s*.3f,y+s*.45f,2.4f,c); }
 void globe(Batch& b,float x,float y,float s,SDL_Color c){
@@ -328,12 +323,6 @@ void globe(Batch& b,float x,float y,float s,SDL_Color c){
 void spinner(Batch& b,float x,float y,float r,float t,SDL_Color c){ b.ring(x,y,r,3.f,c,20,t,t+4.4f); }
 void clock(Batch& b,float x,float y,float r,SDL_Color c){
     b.ring(x,y,r,1.6f,c,16); b.line(x,y,x,y-r*.55f,1.6f,c); b.line(x,y,x+r*.45f,y+r*.15f,1.6f,c); }
-void list(Batch& b,float x,float y,float s,SDL_Color c){
-    for(int i=0;i<3;i++){ float yy=y-s*.5f+i*s*.5f;
-        b.circle(x-s*.62f,yy,1.5f,c,6); b.line(x-s*.3f,yy,x+s*.66f,yy,1.6f,c); } }
-void moon(Batch& b,float x,float y,float r,SDL_Color c){
-    b.ring(x,y,r,2.1f,c,18,-.75f,3.55f);
-    b.line(x+cosf(-.75f)*r,y+sinf(-.75f)*r,x+cosf(3.55f)*r,y+sinf(3.55f)*r,1.4f,alpha(c,120)); }
 void sun(Batch& b,float x,float y,float r,SDL_Color c){
     b.circle(x,y,r*.5f,c,10);
     for(int i=0;i<8;i++){ float a=i*(float)M_PI/4;
@@ -1056,6 +1045,7 @@ struct Sfx {
     }
 };
 
+
 struct Player {
     enum St { STOPPED,BUFFERING,PLAYING,PAUSED,FAILED };
     static constexpr int RATE=48000, CH=2,N=1024;
@@ -1076,17 +1066,21 @@ struct Player {
         return (d>0&&av_gettime_relative()>d)?1:0;
     }
     void start(const std::string& u){
+        std::vector<std::string> c;c.push_back(u);
+        if(u.rfind("https://",0)==0)c.push_back("http://"+u.substr(8));
+        startList(std::move(c));
+    }
+    void startList(std::vector<std::string> urls){
         stop();
-        cands.clear(); cands.push_back(u);
-        if(u.rfind("https://",0)==0)cands.push_back("http://"+u.substr(8));
+        cands=std::move(urls);
         if(dev)SDL_LockAudioDevice(dev);
-        ring.assign((size_t)RATE*CH*2*4,0); head=tail=used=0;
-        mon.assign(N,0); monPos=0;
+        ring.assign((size_t)RATE*CH*2*4,0);head=tail=used=0;
+        mon.assign(N,0);monPos=0;
         if(dev)SDL_UnlockAudioDevice(dev);
-        buffering=true; paused=false; state=BUFFERING;
-        if(sfx){ sfx->tuning=true; sfx->paused=false; sfx->trigger(Sfx::SWEEP); }
-        { std::lock_guard<std::mutex> lk(metaMtx); track.clear(); lastErr.clear(); history.clear(); }
-        run=true; th=std::thread([this]{ loop(); });
+        buffering=true;paused=false;state=BUFFERING;
+        if(sfx){sfx->tuning=true;sfx->paused=false;sfx->trigger(Sfx::SWEEP);}
+        {std::lock_guard<std::mutex> lk(metaMtx);track.clear();lastErr.clear();history.clear();}
+        run=true;th=std::thread([this]{loop();});
     }
     void stop(){
         run=false; deadline.store(0);
@@ -1112,6 +1106,7 @@ struct Player {
     }
     void pushTrack(const std::string& s){
         std::lock_guard<std::mutex> lk(metaMtx);
+        track=s;
         if(!history.empty()&&history.front().first==s)return;
         tm g=tmLocal(time(nullptr)); char tb[8]; snprintf(tb,8,"%02d:%02d",g.tm_hour,g.tm_min);
         history.insert(history.begin(),std::make_pair(s,std::string(tb)));
@@ -1149,18 +1144,26 @@ private:
                 fmt=avformat_alloc_context(); if(!fmt)break;
                 fmt->interrupt_callback.callback=&Player::intCB;
                 fmt->interrupt_callback.opaque=this;
+                const bool isFile=cu.find(".mp3")!=std::string::npos;
+                const AVInputFormat* ifmt=isFile?av_find_input_format("mp3"):nullptr;
                 AVDictionary* opt=nullptr;
-                av_dict_set(&opt,"icy","1",0);
-                av_dict_set(&opt,"rw_timeout","10000000",0);
-                av_dict_set(&opt,"timeout","10000000",0);
+                av_dict_set(&opt,"icy",isFile?"0":"1",0);
+                av_dict_set(&opt,"rw_timeout","4000000",0);
+                av_dict_set(&opt,"timeout","4000000",0);
                 av_dict_set(&opt,"reconnect","1",0);
                 av_dict_set(&opt,"reconnect_streamed","1",0);
-                av_dict_set(&opt,"reconnect_delay_max","3",0);
+                av_dict_set(&opt,"reconnect_delay_max","2",0);
+                av_dict_set(&opt,"multiple_requests","1",0);
                 av_dict_set(&opt,"tls_verify","0",0);
                 av_dict_set(&opt,"user_agent",UA_BROWSER,0);
-                av_dict_set(&opt,"headers","Referer: https://radio.garden/\r\n",0);
+                if(isFile){
+                    av_dict_set(&opt,"probesize","32768",0);
+                    av_dict_set(&opt,"analyzeduration","0",0);
+                } else {
+                    av_dict_set(&opt,"headers","Referer: https://radio.garden/\r\n",0);
+                }
                 deadline.store(av_gettime_relative()+10000000);
-                int r=avformat_open_input(&fmt,cu.c_str(),nullptr,&opt);
+                int r=avformat_open_input(&fmt,cu.c_str(),ifmt,&opt);
                 deadline.store(0); av_dict_free(&opt);
                 if(r>=0){opened=true;break;}
                 char eb[256]; av_strerror(r,eb,sizeof eb); setErr(eb); fmt=nullptr;
@@ -1210,7 +1213,7 @@ private:
             std::vector<uint8_t> out((size_t)RATE*CH*2);
             fails=0; int mt=0; setErr("");
             while(run){
-                if(paused){ SDL_Delay(40); continue; }
+                if(paused){SDL_Delay(40);continue;}
                 deadline.store(av_gettime_relative()+12000000);
                 if(av_read_frame(fmt,pkt)<0){ av_packet_unref(pkt); break; }
                 deadline.store(0);
@@ -1241,6 +1244,7 @@ private:
     }
 };
 
+static void gtaSfxMix(int16_t* o,int frames);
 struct Audio {
     Player* player=nullptr; Sfx sfx; SDL_AudioDeviceID dev=0;
     std::atomic<float> fade{1.f};
@@ -1261,6 +1265,7 @@ struct Audio {
             o[i]=(int16_t)(s*vol);
         }
         a->sfx.mix(o,n/2,Player::RATE);
+        if(!mute)gtaSfxMix(o,n/2);
     }
     void open(Player* p){
         player=p; p->sfx=&sfx;
@@ -1294,7 +1299,7 @@ struct Globe {
     float cy=1,sy=0,cp=1,sp=0;
     static constexpr float DEF_R=285.f;
     static constexpr float HOME_R=980.f, HOME_CX=640.f, HOME_CY=1450.f;
-    bool home=false;   
+    bool home=false;
     Vec3 sunV{0,0,1},sunBase{0,0,1},litSun{9,9,9};
     float cYaw=1e9f,cPitch=1e9f,cR=-1,cCx=1e9f,cCy=1e9f; bool projDirty=true;
     SDL_Texture* cache=nullptr; bool cacheValid=false;
@@ -1596,15 +1601,6 @@ struct Globe {
             }
         }
     }
-    int pick(float x,float y) const {
-        int best=-1; float bd=26*26;
-        for(size_t i=0;i<pp.size();i++){
-            if(pz[i]<=0)continue;
-            float dx=pp[i].x-x,dy=pp[i].y-y,d=dx*dx+dy*dy;
-            if(d<bd){bd=d;best=(int)i;}
-        }
-        return best;
-    }
     void polyV(SDL_Renderer* r,const std::vector<Vec3>& v,SDL_Color col){
         SDL_Point pts[512]; int n=0;
         SDL_SetRenderDrawColor(r,col.r,col.g,col.b,col.a);
@@ -1755,6 +1751,7 @@ struct Globe {
     }
     void toTarget(SDL_Renderer* r,Batch& b,SDL_Texture* t){
         b.flush(r);
+        SDL_RenderSetClipRect(r,nullptr);
         SDL_SetRenderTarget(r,t);
         SDL_SetRenderDrawBlendMode(r,SDL_BLENDMODE_NONE);
         SDL_SetRenderDrawColor(r,0,0,0,0); SDL_RenderClear(r);
@@ -1803,7 +1800,7 @@ struct Globe {
             b.glowRing(center.x,center.y,rf*1.03f,rf*1.11f,alpha(gc,(int)(42*a)),alpha(gc,0),72);
             b.glowRing(center.x,center.y,rf*1.11f,rf*1.26f,alpha(gc,(int)(14*a)),alpha(gc,0),56);
         }
-        if(!zen&&!home){            
+        if(!zen&&!home){
             float breath=.5f+.5f*sinf(t*.9f);
             b.ring(center.x,center.y,26+breath*1.6f,1.4f,alpha(Pal::wire,(int)(96+26*breath)),24);
             for(int k=0;k<4;k++){ float a=k*(float)M_PI/2;
@@ -1911,7 +1908,7 @@ struct Toast { std::string text; float age=0; SDL_Color col; };
 struct UiHit { int id; SDL_Rect r; int data; };
 enum { H_NONE=0,H_PLAYPAUSE,H_FAVNOW,H_BACK,H_ROW,H_FIELD,H_RETRY,
 H_HIST,H_SLEEP,H_PLACE,H_TAB,H_HOME,H_CARD,H_PC_CLOSE,H_PC_RETRY,H_PC_NOW,
-H_PP_BACK,H_PP_PREV,H_PP_NEXT,H_ST_MAP };
+H_PP_BACK,H_PP_PREV,H_PP_NEXT,H_ST_MAP,H_GTA_ROW,H_GTA_GAME,H_GTA_BACK,H_GTA_PLAY,H_GTA_FAV };
 enum Screen { SCR_GLOBE,SCR_CITY,SCR_SEARCH,SCR_LIB };
 enum LibTab { LT_FAV=0,LT_HIST=1,LT_PRESET=2,LT_SOUND=3 };
 static const int W=1280,H=720,PW=430,NB=32;
@@ -1938,6 +1935,288 @@ static const char* wxCond(int c){
     if(c>=95)return "Thunder";
     return "—";
 }
+static const char* GTA_AUDIO="https://audio.gtaradio.net";
+static const char* GTA_STATUS="https://audio.gtaradio.net/status-json.xsl";
+
+struct GtaStation{ std::string mount,game,name,genre,title,url; int listeners=0,bitrate=0; };
+struct GtaRes{ bool ok=false; std::string err; std::vector<GtaStation> v; };
+struct GtaGameDef{ const char* key; const char* label; float hue; };
+static const GtaGameDef GTA_GAMES[]={
+    {"4","GTA IV",38.f},{"sa","San Andreas",95.f},{"vc","Vice City",322.f},
+    {"vcs","Vice City Stories",286.f},{"lcs","Liberty City Stories",176.f},
+    {"3","GTA III",210.f}
+};
+static const int GTA_NG=6;
+static std::string gtaNormGame(std::string g){ return lowerStr(g); }
+static int gtaGameIdx(const std::string& g){
+    std::string k=gtaNormGame(g);
+    for(int i=0;i<GTA_NG;i++)if(k==GTA_GAMES[i].key)return i;
+    return GTA_NG;
+}
+static const char* gtaGameLabel(const std::string& g){ int i=gtaGameIdx(g); return i<GTA_NG?GTA_GAMES[i].label:"GTA"; }
+static float gtaHue(const std::string& g){ int i=gtaGameIdx(g); return i<GTA_NG?GTA_GAMES[i].hue:210.f; }
+static std::string gtaPath(const std::string& rel){
+    static std::map<std::string,std::string> cache;
+    auto it=cache.find(rel);
+    if(it!=cache.end())return it->second;
+    std::string found;
+    for(const std::string& path:{gAppDir+"gta/"+rel,gAppDir+"assets/gta/"+rel,gCacheDir+"gta/"+rel,std::string("romfs:/gta/")+rel}){
+        if(fileExists(path)){found=path;break;}
+    }
+    cache.emplace(rel,found);
+    return found;
+}
+static const char* GTA_NAMES=
+    "3/head=Head Radio|Pop · rock;3/class=Double Cleff FM|Classical;3/double=Double Cleff FM|Classical;3/kjah=K-JAH|Reggae · dub;"
+    "3/rise=Rise FM|House · trance;3/lips=Lips 106|Pop · funk;3/msx=MSX FM|Drum & bass;3/game=Game Radio|East coast rap;"
+    "3/flash=Flashback 95.6|80s;3/chat=Chatterbox FM|Talk;"
+    "4/afro_beat=International Funk 99|Afrobeat · funk;4/babylon=Tuff Gong Radio|Reggae · dub;"
+    "4/beat_95=The Beat 102.7|Hip-hop · R&B;4/bobby_konders=Massive B Soundsystem 96.9|Dancehall;"
+    "4/classical_ambient=The Journey|Ambient · new age;4/dance_mix=Electro Choc|Electro house;"
+    "4/dance_rock=Radio Broker|Dance rock;4/fusion_fm=Fusion FM|Jazz fusion;4/hardcore=Liberty City Hardcore|Hardcore punk;"
+    "4/jazz_nation=Jazz Nation Radio 108.5|Jazz;4/k109_the_studio=K109 The Studio|Disco;4/lazlow=Integrity 2.0|Talk;"
+    "4/liberty_rock=Liberty Rock Radio 97.8|Classic rock;4/meditation=Self Actualization FM|Ambient;"
+    "4/ny_classics=The Classics 104.1|Oldschool hip-hop;4/plr=Public Liberty Radio|Talk;4/ramjamfm=Ram Jam FM|Reggae · dub;"
+    "4/san_juan_sounds=San Juan Sounds|Reggaeton · bachata;4/the_vibe=The Vibe 98.8|R&B · soul;4/vcfm=Vice City FM|80s;"
+    "4/vladivostok=Vladivostok FM|Russian pop · rock;4/wktt=We Know The Truth|Talk;"
+    "sa/playback-fm=Playback FM|Oldschool hip-hop;sa/k-rose=K-Rose|Country;sa/k-dst=K-DST|Classic rock;"
+    "sa/bounce-fm=Bounce FM|Funk · disco;sa/sfur=SF-UR|House;sa/radio-los-santos=Radio Los Santos|West coast rap;"
+    "sa/radio-x=Radio X|Alternative · grunge;sa/csr=CSR 103.9|New jack swing;sa/k-jah=K-JAH West|Reggae;"
+    "sa/master-sounds=Master Sounds 98.3|Funk · rare groove;sa/wctr=WCTR|Talk;"
+    "vc/wild=Wildstyle Pirate Radio|Hip-hop · electro;vc/fever=Fever 105|Disco · funk;vc/vrock=V-Rock|Rock · metal;"
+    "vc/vcpr=VCPR|Talk;vc/espant=Radio Espantoso|Latin · salsa;vc/emotion=Emotion 98.3|Ballads;"
+    "vc/wave=Wave 103|New wave · synthpop;vc/flash=Flash FM|80s pop;vc/kchat=K-Chat|Talk;"
+    "vcs/vrock=V-Rock|Rock · metal;vcs/flash=Flash FM|80s pop;vcs/paradise=Paradise FM|Disco · funk;"
+    "vcs/vcfl=Vice City For Lovers|Latin · soul;vcs/vcpr=VCPR|Talk;vcs/wave=Wave 103|New wave;"
+    "vcs/emotion=Emotion 98.3|Ballads;vcs/espant=Radio Espantoso|Latin;vcs/fresh=Fresh 92.7|Hip-hop · R&B;"
+    "lcs/head=Head Radio|Pop · rock;lcs/double=Double Cleff FM|Classical;lcs/kjah=K-JAH|Reggae;"
+    "lcs/rise=Rise FM|House;lcs/lips=Lips 106|Pop · funk;lcs/msx=MSX FM|Drum & bass;"
+    "lcs/lcj=Liberty City Jam|Hip-hop;lcs/lcfr=Liberty City Free Radio|Talk;lcs/flash=Flashback FM|80s;lcs/mundo=Radio Mundo|World · latin;";
+static void gtaLabel(const std::string& mount,std::string& name,std::string& genre){
+    static std::map<std::string,std::pair<std::string,std::string>> m;
+    if(m.empty()){
+        std::string s=GTA_NAMES; size_t i=0;
+        while(i<s.size()){
+            size_t j=s.find(';',i); if(j==std::string::npos)j=s.size();
+            std::string e=s.substr(i,j-i); i=j+1;
+            size_t eq=e.find('='),pp=e.find('|'); if(eq==std::string::npos)continue;
+            m[e.substr(0,eq)]={e.substr(eq+1,pp==std::string::npos?std::string::npos:pp-eq-1),pp==std::string::npos?"":e.substr(pp+1)};
+        }
+    }
+    auto it=m.find(lowerStr(mount));
+    if(it!=m.end()){name=it->second.first;genre=it->second.second;return;}
+    size_t sl=mount.find('/'); std::string t=sl==std::string::npos?mount:mount.substr(sl+1);
+    for(auto& c:t)if(c=='-'||c=='_')c=' ';
+    if(!t.empty())t[0]=(char)toupper((unsigned char)t[0]);
+    name=t.empty()?mount:t; genre="Video game music";
+}
+static std::string gtaStationAsset(const char* folder,const std::string& mount){
+    std::string nested=std::string(folder)+mount+".png";
+    if(!gtaPath(nested).empty())return nested;
+    size_t slash=mount.find('/');
+    if(slash!=std::string::npos){
+        std::string flat=std::string(folder)+mount.substr(0,slash)+"_"+mount.substr(slash+1)+".png";
+        if(!gtaPath(flat).empty())return flat;
+        std::string shortName=std::string(folder)+mount.substr(slash+1)+".png";
+        if(!gtaPath(shortName).empty())return shortName;
+    }
+    return nested;
+}
+static std::string gtaLogoRel(const std::string& mount){return gtaStationAsset("stations/",mount);}
+static bool gtaLoadCatalog(std::map<std::string,std::vector<GtaStation>>& out){
+    std::string p=gtaPath("catalog.json"),body;
+    if(p.empty()||!readFile(p,body))return false;
+    J j(body); if(!j.eat('{'))return false;
+    std::string k;
+    while(objNext(j,k)){
+        if(k!="games"){j.skip();continue;}
+        if(!j.eat('['))break;
+        while(arrNext(j)){
+            if(!j.eat('{'))break;
+            std::string gk,key; std::vector<GtaStation> sts;
+            while(objNext(j,gk)){
+                if(gk=="key")key=gtaNormGame(trimStr(j.str()));
+                else if(gk=="stations"){
+                    if(!j.eat('['))break;
+                    while(arrNext(j)){
+                        if(!j.eat('{'))break;
+                        GtaStation st; std::string sk;
+                        while(objNext(j,sk)){
+                            if(sk=="mount")st.mount=trimStr(j.str());
+                            else if(sk=="url")st.url=trimStr(j.str());
+                            else j.skip();
+                        }
+                        j.eat('}');
+                        if(!st.mount.empty())sts.push_back(std::move(st));
+                        if(!j.ok)break;
+                    }
+                    j.eat(']');
+                } else j.skip();
+            }
+            j.eat('}');
+            if(!key.empty()&&!sts.empty()){
+                for(auto& st:sts){
+                    st.game=key;
+                    if(st.mount.find('/')==std::string::npos)st.mount=key+"/"+st.mount;
+                    if(st.url.empty())st.url=std::string(GTA_AUDIO)+"/"+st.mount;
+                    gtaLabel(st.mount,st.name,st.genre);
+                }
+                std::sort(sts.begin(),sts.end(),[](const GtaStation&a,const GtaStation&b){return a.name<b.name;});
+                out[key]=std::move(sts);
+            }
+            if(!j.ok)break;
+        }
+        j.eat(']');
+    }
+    return !out.empty();
+}
+static void gtaOne(J& j,GtaStation& st){
+    if(!j.eat('{'))return;
+    std::string k,lu,sn; bool audio=true;
+    while(objNext(j,k)){
+        if(k=="listenurl")lu=j.str();
+        else if(k=="server_name")sn=j.str();
+        else if(k=="title")st.title=trimStr(j.str());
+        else if(k=="listeners")st.listeners=(int)j.num();
+        else if(k=="bitrate")st.bitrate=(int)j.num();
+        else if(k=="server_type"){std::string v=lowerStr(j.str());audio=v.rfind("audio",0)==0;}
+        else j.skip();
+    }
+    j.eat('}');
+    std::string path; size_t p=lu.find("://");
+    if(p!=std::string::npos){size_t q=lu.find('/',p+3);if(q!=std::string::npos)path=lu.substr(q);}
+    if(path.empty()&&!sn.empty()&&sn[0]=='/')path=sn;
+    if(!path.empty()&&path[0]=='/')path.erase(0,1);
+    if(!audio||path.find('/')==std::string::npos)return;
+    st.mount=path; st.game=gtaNormGame(path.substr(0,path.find('/')));
+    st.url=std::string(GTA_AUDIO)+"/"+path;
+    gtaLabel(path,st.name,st.genre);
+}
+static GtaRes parseGtaStatus(const std::string& body){
+    GtaRes r; J j(body); if(!j.eat('{'))return r;
+    std::string k;
+    while(objNext(j,k)){
+        if(k!="icestats"){j.skip();continue;}
+        if(!j.eat('{'))break;
+        std::string ik;
+        while(objNext(j,ik)){
+            if(ik!="source"){j.skip();continue;}
+            if(j.at('[')){
+                if(!j.eat('['))break;
+                while(arrNext(j)){GtaStation st;gtaOne(j,st);if(!st.mount.empty())r.v.push_back(std::move(st));if(!j.ok)break;}
+                j.eat(']');
+            } else {GtaStation st;gtaOne(j,st);if(!st.mount.empty())r.v.push_back(std::move(st));}
+        }
+        j.eat('}');
+    }
+    r.ok=!r.v.empty(); return r;
+}
+static GtaRes fetchGtaLive(){
+    std::string path=gCacheDir+"gta_live.json",body,err;
+    body=httpGet(GTA_STATUS,err,10,false,true,UA_APP);
+    if(!body.empty()){
+        GtaRes r=parseGtaStatus(body);
+        if(r.ok){writeFile(path,body);return r;}
+    }
+    if(readFile(path,body)){GtaRes r=parseGtaStatus(body);if(r.ok)return r;}
+    GtaRes r; r.err=err.empty()?"catalog unavailable":err; return r;
+}
+static int gtaLocalOffsetMin(){
+    time_t n=time(nullptr); tm l=tmLocal(n),g=tmUtc(n);
+    int d=(l.tm_hour-g.tm_hour)*60+(l.tm_min-g.tm_min);
+    int dd=l.tm_yday-g.tm_yday; if(dd>1)dd=-1; if(dd<-1)dd=1;
+    return d+dd*1440;
+}
+struct GtaSfxBank{
+    std::vector<int16_t> pcm[3];
+    std::atomic<int> req{-1},cur{-1};
+    std::atomic<size_t> pos{0};
+    bool load(int idx,const std::string& rel,float maxSec){
+        if(idx<0||idx>2)return false;
+        std::string path=gtaPath(rel); if(path.empty())return false;
+        std::vector<int16_t>& dst=pcm[idx]; dst.clear();
+        AVFormatContext* fmt=nullptr;
+        if(avformat_open_input(&fmt,path.c_str(),nullptr,nullptr)<0||!fmt)return false;
+        bool ok=false;
+        if(avformat_find_stream_info(fmt,nullptr)>=0){
+            const AVCodec* dec=nullptr;
+            int si=av_find_best_stream(fmt,AVMEDIA_TYPE_AUDIO,-1,-1,&dec,0);
+            if(si>=0&&dec){
+                AVCodecContext* ctx=avcodec_alloc_context3(dec);
+                if(ctx&&avcodec_parameters_to_context(ctx,fmt->streams[si]->codecpar)>=0&&avcodec_open2(ctx,dec,nullptr)>=0){
+                    SwrContext* swr=swr_alloc();
+                    if(swr){
+#if LIBAVUTIL_VERSION_INT>=AV_VERSION_INT(57,28,100)
+                        AVChannelLayout outLayout=AV_CHANNEL_LAYOUT_STEREO;
+                        av_opt_set_chlayout(swr,"in_chlayout",&ctx->ch_layout,0);
+                        av_opt_set_chlayout(swr,"out_chlayout",&outLayout,0);
+#else
+                        av_opt_set_channel_layout(swr,"in_channel_layout",ctx->channel_layout?ctx->channel_layout:av_get_default_channel_layout(ctx->channels),0);
+                        av_opt_set_channel_layout(swr,"out_channel_layout",AV_CH_LAYOUT_STEREO,0);
+#endif
+                        av_opt_set_int(swr,"in_sample_rate",ctx->sample_rate,0);
+                        av_opt_set_sample_fmt(swr,"in_sample_fmt",ctx->sample_fmt,0);
+                        av_opt_set_int(swr,"out_sample_rate",48000,0);
+                        av_opt_set_sample_fmt(swr,"out_sample_fmt",AV_SAMPLE_FMT_S16,0);
+                    }
+                    if(swr&&swr_init(swr)>=0){
+                        AVPacket* pkt=av_packet_alloc(); AVFrame* fr=av_frame_alloc();
+                        std::vector<uint8_t> buf(48000*4);
+                        size_t cap=(size_t)(maxSec*48000.f)*2;
+                        if(pkt&&fr){
+                            while(dst.size()<cap&&av_read_frame(fmt,pkt)>=0){
+                                if(pkt->stream_index==si){
+                                    avcodec_send_packet(ctx,pkt);
+                                    while(avcodec_receive_frame(ctx,fr)==0&&dst.size()<cap){
+                                        uint8_t* d=buf.data();
+                                        int n=swr_convert(swr,&d,48000,(const uint8_t**)fr->extended_data,fr->nb_samples);
+                                        if(n>0){
+                                            const int16_t* samples=(const int16_t*)buf.data();
+                                            for(int i=0;i<n*2&&dst.size()<cap;i++)dst.push_back(samples[i]);
+                                        }
+                                    }
+                                }
+                                av_packet_unref(pkt);
+                            }
+                        }
+                        if(fr)av_frame_free(&fr);
+                        if(pkt)av_packet_free(&pkt);
+                        ok=!dst.empty();
+                    }
+                    swr_free(&swr);
+                }
+                if(ctx)avcodec_free_context(&ctx);
+            }
+        }
+        avformat_close_input(&fmt);
+        return ok;
+    }
+    void trigger(int i){if(i<0||i>2||pcm[i].empty())return;pos.store(0);cur.store(i);req.store(i);}
+    void mix(int16_t* o,int frames){
+        int r=req.exchange(-1); if(r>=0){cur.store(r);pos.store(0);}
+        int c=cur.load(); if(c<0||c>2)return;
+        const std::vector<int16_t>& p=pcm[c]; size_t k=pos.load();
+        for(int i=0;i<frames;i++){
+            if(k+1>=p.size()){cur.store(-1);break;}
+            for(int ch=0;ch<2;ch++){
+                int add=(int)((int)p[k+ch]*.5f),idx=i*2+ch,v=o[idx]+add;
+                o[idx]=(int16_t)(v>32767?32767:(v<-32768?-32768:v));
+            }
+            k+=2;
+        }
+        pos.store(k);
+    }
+};
+static GtaSfxBank gGtaSfx;
+static void gtaSfxMix(int16_t* o,int frames){gGtaSfx.mix(o,frames);}
+namespace GtaIcon{
+static void wheel(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc){
+    b.ring(x,y,s*.78f,2.f,c,20);
+    for(int i=0;i<8;i++){float a=i*(float)M_PI/4+.19f;b.line(x+cosf(a)*s*.34f,y+sinf(a)*s*.34f,x+cosf(a)*s*.72f,y+sinf(a)*s*.72f,1.6f,alpha(c,150));}
+    b.ring(x,y,s*.30f,1.8f,acc,14);b.circle(x,y,s*.10f,acc,8);
+}
+}
+
 struct Row {
     int kind=0; std::string title,sub,place,country,placeId; Channel ch;
     float lat=0,lon=0,y=0,h=0; int sel=-1,setting=-1,slot=-1;
@@ -1966,17 +2245,12 @@ static void frame(Batch& b,float x0,float y0,float w,float h,float r,SDL_Color c
     b.ring(x0+r,y0+r,r,2.f,c,6,(float)M_PI,(float)M_PI*1.5f);
 }
 static void radio(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc){
-    float w=s*1.66f,h=s*1.02f;
-    float axr=x+w*.36f;                            
-    float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;  
-    float x0=x-w*.5f,y0=aby-h*.5f+s*.20f;
-    float ay=y0-s*.66f;                            
 
     float w=s*1.66f,h=s*1.02f;
-    float axr=x+w*.36f;                            
-    float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;  
+    float axr=x+w*.36f;
+    float aby=y+h*.5f+s*.20f-((s*.54f-s*.66f)+h*.5f)*.5f;
     float x0=x-w*.5f,y0=aby-h*.5f+s*.20f;
-    float ay=y0-s*.66f;                            
+    float ay=y0-s*.66f;
     b.line(x0+w*.62f,y0+s*.02f,axr,ay,2.4f,c);
     b.circle(axr,ay,2.8f,acc,8);
     b.ring(axr,ay,s*.34f,1.8f,alpha(acc,140),10,-2.6f,-.5f);
@@ -2000,13 +2274,17 @@ static void passport(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc)
     b.line(x-s*.28f,y+s*.44f,x+s*.34f,y+s*.44f,2.f,alpha(c,150));
     b.line(x-s*.28f,y+s*.62f,x+s*.14f,y+s*.62f,2.f,alpha(c,100));
 }
+static void gta(Batch& b,float x,float y,float s,SDL_Color c,SDL_Color acc){
+    GtaIcon::wheel(b,x,y,s*.92f,c,acc);
+    b.line(x-s*.62f,y+s*.86f,x+s*.62f,y+s*.86f,2.f,alpha(c,150));
+    b.circle(x-s*.30f,y+s*.86f,2.2f,acc,6);
+    b.circle(x+s*.30f,y+s*.86f,2.2f,acc,6);
+}
 }
 
 struct HomeMenu {
-    static constexpr int N=2;                
-    static constexpr float GAP=300.f;         
-    static constexpr int N=2;                 
-    static constexpr float GAP=300.f;         
+    static constexpr int N=3;
+    static constexpr float GAP=300.f;
     struct Card {
         float cx=0,cy=0,w=224,h=200,ph=0;
         float lift=0,liftV=0,sc=.93f,scV=0,push=0,pushV=0;
@@ -2017,18 +2295,17 @@ struct HomeMenu {
     int sel=1; float intro=0; bool latch=false;
 
     void init(){
-        const char* nm[N]={"World Passport","Radio"};
+        const char* nm[N]={"World Passport","Radio","GTA Radio"};
         for(int i=0;i<N;i++){
             Card& k=c[i];
-            k.cx=W/2.f+(i-(N-1)*.5f)*GAP;     
-            k.cx=W/2.f+(i-(N-1)*.5f)*GAP;     
+            k.cx=W/2.f+(i-(N-1)*.5f)*GAP;
             k.cy=250.f; k.ph=i*2.1f;
             k.name=nm[i]; k.icon=i;
             k.glow=(i==sel)?1.f:0.f;
             k.ty=(i<sel)?-.13f:((i>sel)?.13f:0.f);
         }
     }
-    
+
     static void spring(float& x,float& v,float tgt,float k,float d,float dt){
         v+=(tgt-x)*k*dt; v*=powf(d,dt); x+=v*dt;
     }
@@ -2051,7 +2328,7 @@ struct HomeMenu {
             k.glow=lerpf(k.glow,on?1.f:0.f,1-powf(.0025f,dt));
         }
     }
-    
+
     struct Xf {
         float cx,cy,sc,cX,sX,cY,sY,cZ,sZ;
         void set(float cx_,float cy_,float sc_,float ax,float ay,float az){
@@ -2101,11 +2378,11 @@ static uint32_t pcHash(const std::string& s){
 struct Card {
     std::string id,city,country,cc,photoUrl;
     float lat=0,lon=0;
-    int variant=0,photoState=0;      
+    int variant=0,photoState=0;
     float failT=-1e9f;
     long long ts=0;
 };
-struct PcPhotoRes { std::string id,url,note; int w=0,h=0; std::vector<uint8_t> rgba; bool ok=false; };
+struct PcPhotoRes { std::string id,url; int w=0,h=0; std::vector<uint8_t> rgba; bool ok=false; };
 static float pcHue(SDL_Color c){
     float r=c.r/255.f,g=c.g/255.f,b=c.b/255.f;
     float mx=std::max(r,std::max(g,b)),mn=std::min(r,std::min(g,b)),d=mx-mn;
@@ -2298,6 +2575,26 @@ static bool decodeImageFit(const std::string& body,int maxDim,std::vector<uint8_
     }
     avcodec_free_context(&ctx);
     return ok;
+}
+
+static void gtaTrimAlpha(std::vector<uint8_t>& px,int& w,int& h){
+    if(w<=0||h<=0||(size_t)w*(size_t)h*4>px.size())return;
+    int x0=w,y0=h,x1=-1,y1=-1;
+    for(int y=0;y<h;y++)for(int x=0;x<w;x++){
+        if(px[((size_t)y*w+x)*4+3]>10){
+            if(x<x0)x0=x;
+            if(x>x1)x1=x;
+            if(y<y0)y0=y;
+            if(y>y1)y1=y;
+        }
+    }
+    if(x1<0||y1<0)return;
+    int nw=x1-x0+1,nh=y1-y0+1;
+    if(nw==w&&nh==h)return;
+    std::vector<uint8_t> out((size_t)nw*nh*4);
+    for(int y=0;y<nh;y++)
+        memcpy(out.data()+(size_t)y*nw*4,px.data()+((size_t)(y+y0)*w+x0)*4,(size_t)nw*4);
+    px.swap(out);w=nw;h=nh;
 }
 static std::string pcLang(const std::string& cc){
     static const char* T=
@@ -2536,8 +2833,8 @@ struct StStyle{ int shape; float rx,ry,inner; bool arc; int rings; bool dash,tic
 static StStyle stStyle(const Stamp& s,const StampCDef& d){
     uint32_t h=pcHash("stamp|"+lowerStr(s.iso));
     StStyle t{};
-    static const int EU[4]={3,1,0,5};   
-    static const int NA[3]={2,3,1};     
+    static const int EU[4]={3,1,0,5};
+    static const int NA[3]={2,3,1};
     static const int AS[5]={0,3,1,4,6};
     static const int SA[4]={3,0,1,7};
     static const int AF[4]={0,1,3,5};
@@ -2573,13 +2870,13 @@ static StStyle stStyle(const Stamp& s,const StampCDef& d){
 
 static SDL_Color stInk(const Stamp& s,const StampCDef& d){
     static const SDL_Color P[7][3]={
-        {C(28,32,48),C(38,44,92),C(24,60,96)},    
-        {C(30,32,44),C(150,38,44),C(28,60,88)},   
-        {C(150,38,44),C(28,32,48),C(24,92,62)},   
-        {C(24,92,62),C(58,42,96),C(28,86,96)},    
-        {C(28,32,48),C(24,92,62),C(96,66,40)},    
-        {C(28,86,96),C(30,32,44),C(58,42,96)},    
-        {C(70,72,78),C(28,32,48),C(58,42,96)}     
+        {C(28,32,48),C(38,44,92),C(24,60,96)},
+        {C(30,32,44),C(150,38,44),C(28,60,88)},
+        {C(150,38,44),C(28,32,48),C(24,92,62)},
+        {C(24,92,62),C(58,42,96),C(28,86,96)},
+        {C(28,32,48),C(24,92,62),C(96,66,40)},
+        {C(28,86,96),C(30,32,44),C(58,42,96)},
+        {C(70,72,78),C(28,32,48),C(58,42,96)}
     };
     int r=d.cont=="EU"?0:d.cont=="NA"?1:d.cont=="AS"?2:d.cont=="SA"?3:
           d.cont=="AF"?4:d.cont=="OC"?5:6;
@@ -2748,6 +3045,16 @@ std::vector<StPlace> stPlace;
 bool stLayoutDirty=true;
 int stAnimIdx=-1;
 SDL_Texture* stAnimTex=nullptr; int stAnimTexIdx=-1;
+std::map<std::string,SDL_Texture*> stTexCache;
+std::map<std::string,Uint32> stTexUse;
+int stBakeBudget=0;
+std::map<int,Uint32> pgUse;
+std::map<int,std::string> visaKeyBase;
+std::map<int,std::vector<int>> visaIdx;
+bool visaKeyDirty=true;
+Uint32 labEvictAt=0;
+std::set<std::string> stMapIso; bool stMapIsoDirty=true;
+std::vector<std::string> placeIso;
 float stAnimT=0,stShake=0,stMapUntil=0;
 std::string stCur;
 int stSaveAcc=0;
@@ -2755,6 +3062,26 @@ std::map<std::string,SDL_Texture*> stOvr;
 std::set<std::string> stOvrTried;
 float airAcc=0; int airSaveT=0;
 std::map<std::string,Uint32> flagUse;
+    Worker gtaWorker; Slot<GtaRes> gtaSlot;
+    Worker gtaImgWorker;
+    struct GtaPx{std::string rel;int w=0,h=0;std::vector<uint8_t> rgba;};
+    std::mutex gtaPxMtx;
+    std::deque<GtaPx> gtaPxQ;
+    std::set<std::string> gtaPxPending;
+    std::vector<GtaStation> gta;
+    int gtaCnt[GTA_NG]={}; size_t gtaCntN=0;
+    bool gtaMode=false,nowGta=false,gtaReady=false;
+    float gtaMix=0,gtaPoll=0;
+    int gtaView=0,gtaPick=0,gtaGame=0,gtaSel=0;
+    float gtaViewMix=0,gtaCar=0;
+    bool gtaCarDrag=false; float gtaCarStart=0;
+    std::vector<int> gtaRows;
+    struct GtaFx2{float lift=0,liftV=0,sc=.92f,scV=0,glow=0,ph=0;} gtaFx2[GTA_NG];
+    bool gtaFxInit=false;
+    struct GtaTx2{SDL_Texture* tex=nullptr;int w=0,h=0;Uint32 use=0;};
+    std::map<std::string,GtaTx2> gtaTx2;
+    std::set<std::string> gtaTx2Miss;
+    std::string gtaNowMount;
     HomeMenu home; bool homeMode=true; float homeMix=1.f;
     bool minusDown=false,plusDown=false,comboFired=false;
     Place curCity; CityRes cityRes; bool cityLoading=false; Place cityWant; bool cityWantSet=false;
@@ -2764,7 +3091,9 @@ std::map<std::string,Uint32> flagUse;
     Slot<PlacesRes> placesSlot; Slot<std::vector<std::vector<Vec2>>> landSlot;
     Slot<RandomRes> randomSlot; bool randomBusy=false;
     Slot<WxRes> wxSlot; std::string wxKey; WxRes nowWx; std::map<std::string,WxRes> wxCache;
-    Slot<FlagRes> flagSlot; std::string flagReq;
+    Worker flagWorker[2]; int flagRR=0;
+    std::mutex flagMtx; std::deque<FlagRes> flagQ;
+    std::set<std::string> flagPending;
     Slot<GeoRes> geoSlot; bool geoAsked=false;
     std::map<std::string,SDL_Texture*> flagTex; std::set<std::string> flagTried;
     std::vector<std::pair<std::string,std::string>> histView;
@@ -2787,6 +3116,16 @@ std::map<std::string,Uint32> flagUse;
     bool bl=false,br=false;
     float pinchDist=0; int fingers=0;
     std::map<SDL_FingerID,Vec2> touch;
+    enum { TZ_NONE=0,TZ_GLOBE,TZ_LIST,TZ_HOME,TZ_PASSPORT,TZ_CARD,TZ_UI,TZ_GTA };
+    SDL_FingerID tPrimary=-1;
+    Vec2 tStart{0,0},tPrev{0,0},tCur{0,0};
+    Uint32 tDownT=0,tLastMoveT=0;
+    float tTravel=0; int tZone=TZ_NONE; bool tActive=false;
+    Uint32 lastTapT=0; Vec2 lastTapP{0,0};
+    bool scrollManual=false; float scrollVel=0; float listScrollMax=0;
+    SDL_Rect panelListRect{0,0,0,0}; bool panelListOn=false;
+    SDL_Rect nowCardRect{0,0,0,0}; bool nowCardOn=false;
+    bool lblInit=false,screenOff=false; float savedBrightness=1.f;
     float idleT=0,nightMix=0; bool nightMode=false;
     float sleepLeft=0; int sleepMin=0; float osdVol=0,tuneAnim=0;
     bool greeted=false;
@@ -2794,8 +3133,458 @@ std::map<std::string,Uint32> flagUse;
     void touchState(){ stateDirty=true; saveTimer=1.5f; }
     void flushState(){ if(stateDirty){ saveState(state); stateDirty=false; saveTimer=0; } }
     void flushDead(){ if(deadDirty){ saveIdSet("dead.txt",deadPlaces); saveIdSet("broken.txt",brokenCh); deadDirty=false; } }
+    std::string gtaAssetPath(const std::string& rel){
+        static std::map<std::string,std::string> cache;
+        auto it=cache.find(rel);
+        if(it!=cache.end())return it->second;
+        std::string found;
+        for(const std::string& path:{gAppDir+"gta/"+rel,gAppDir+"assets/gta/"+rel,gCacheDir+"gta/"+rel,std::string("romfs:/gta/")+rel}){
+            if(fileExists(path)){found=path;break;}
+        }
+        cache.emplace(rel,found);
+        return found;
+    }
+    SDL_Texture* gtaTex2(const std::string& rel,int maxDim){
+        if(rel.empty())return nullptr;
+        auto it=gtaTx2.find(rel);
+        if(it!=gtaTx2.end()){it->second.use=frameNo;return it->second.tex;}
+        if(gtaTx2Miss.count(rel))return nullptr;
+        std::string path=gtaAssetPath(rel);
+        if(path.empty()){gtaTx2Miss.insert(rel);return nullptr;}
+        bool crop=rel.rfind("stations/",0)==0;
+        {
+            std::lock_guard<std::mutex> lk(gtaPxMtx);
+            if(gtaPxPending.count(rel))return nullptr;
+            gtaPxPending.insert(rel);
+        }
+        gtaImgWorker.post([this,path,rel,maxDim,crop]{
+            GtaPx result;result.rel=rel;
+            std::string body;
+            if(readFile(path,body)){
+                if(decodeImageFit(body,maxDim,result.rgba,result.w,result.h)&&result.w>0&&result.h>0){
+                    if(crop)gtaTrimAlpha(result.rgba,result.w,result.h);
+                } else {result.w=result.h=0;}
+            }
+            std::lock_guard<std::mutex> lk(gtaPxMtx);
+            gtaPxQ.push_back(std::move(result));
+        });
+        return nullptr;
+    }
+    void gtaUploadPx(){
+        int budget=3;
+        while(budget>0){
+            GtaPx result;
+            {
+                std::lock_guard<std::mutex> lk(gtaPxMtx);
+                if(gtaPxQ.empty())return;
+                result=std::move(gtaPxQ.front());
+                gtaPxQ.pop_front();
+                gtaPxPending.erase(result.rel);
+            }
+            budget--;
+            if(result.w<=0||result.h<=0){gtaTx2Miss.insert(result.rel);continue;}
+            GtaTx2 texture;
+            texture.tex=SDL_CreateTexture(ren,SDL_PIXELFORMAT_ABGR8888,SDL_TEXTUREACCESS_STATIC,result.w,result.h);
+            if(!texture.tex){gtaTx2Miss.insert(result.rel);continue;}
+            SDL_UpdateTexture(texture.tex,nullptr,result.rgba.data(),result.w*4);
+            SDL_SetTextureBlendMode(texture.tex,SDL_BLENDMODE_BLEND);
+            texture.w=result.w;texture.h=result.h;texture.use=frameNo;
+            gtaTx2[result.rel]=texture;
+            if(gtaTx2.size()>44){
+                std::string old;Uint32 best=0xFFFFFFFFu;
+                for(auto& kv:gtaTx2)if(kv.second.use!=frameNo&&kv.second.use<best){best=kv.second.use;old=kv.first;}
+                if(!old.empty()){
+                    auto d=gtaTx2.find(old);
+                    if(d!=gtaTx2.end()){if(d->second.tex)SDL_DestroyTexture(d->second.tex);gtaTx2.erase(d);}
+                }
+            }
+        }
+    }
+    void gtaFreeTx2(){
+        for(auto& kv:gtaTx2)if(kv.second.tex)SDL_DestroyTexture(kv.second.tex);
+        gtaTx2.clear();gtaTx2Miss.clear();
+        std::lock_guard<std::mutex> lk(gtaPxMtx);
+        gtaPxQ.clear();gtaPxPending.clear();
+    }
+    void gtaLogo(const std::string& rel,const SDL_Rect& box,int maxDim,int a,int bright){
+        SDL_Texture* tx=gtaTex2(rel,maxDim);if(!tx||a<=0||box.w<=0||box.h<=0)return;
+        int iw=0,ih=0;SDL_QueryTexture(tx,nullptr,nullptr,&iw,&ih);
+        if(iw<=0||ih<=0)return;
+        float scale=std::min(box.w/(float)iw,box.h/(float)ih);
+        int dw=std::max(1,(int)(iw*scale+.5f)),dh=std::max(1,(int)(ih*scale+.5f));
+        SDL_Rect dst{box.x+(box.w-dw)/2,box.y+(box.h-dh)/2,dw,dh};
+        Uint8 mod=(Uint8)clampf((float)bright,0.f,255.f);
+        SDL_SetTextureColorMod(tx,mod,mod,mod);
+        SDL_SetTextureAlphaMod(tx,(Uint8)clampf((float)a,0.f,255.f));
+        SDL_RenderCopy(ren,tx,nullptr,&dst);
+        SDL_SetTextureColorMod(tx,255,255,255);SDL_SetTextureAlphaMod(tx,255);
+    }
+    void gtaCoverFill(const std::string& rel,const SDL_Rect& box,int maxDim,int a,int bright){
+        SDL_Texture* texture=gtaTex2(rel,maxDim);
+        if(!texture||a<=0||box.w<=0||box.h<=0)return;
+        int iw=0,ih=0;SDL_QueryTexture(texture,nullptr,nullptr,&iw,&ih);
+        if(iw<=0||ih<=0)return;
+        float target=box.w/(float)box.h,source=iw/(float)ih;
+        SDL_Rect src;
+        if(source>target){src.h=ih;src.w=(int)(ih*target+.5f);src.x=(iw-src.w)/2;src.y=0;}
+        else{src.w=iw;src.h=(int)(iw/target+.5f);src.x=0;src.y=(ih-src.h)/2;}
+        Uint8 mod=(Uint8)clampf((float)bright,0.f,255.f);
+        SDL_SetTextureColorMod(texture,mod,mod,mod);
+        SDL_SetTextureAlphaMod(texture,(Uint8)clampf((float)a,0.f,255.f));
+        SDL_RenderCopy(ren,texture,&src,&box);
+        SDL_SetTextureColorMod(texture,255,255,255);
+        SDL_SetTextureAlphaMod(texture,255);
+    }
+    std::string gtaCover2(const std::string& key){
+        if(!gtaAssetPath("games/"+key+".png").empty())return "games/"+key+".png";
+        if(!gtaAssetPath("games/"+key+"_background.png").empty())return "games/"+key+"_background.png";
+        return "";
+    }
+    std::string gtaGLogo2(const std::string& key){
+        const char* suffix[]={"_logo.png","_logo-mobile.png","_logo_gta_logo-1.png","_logo-animated.png"};
+        for(const char* tail:suffix){std::string rel="games/"+key+tail;if(!gtaAssetPath(rel).empty())return rel;}
+        return "";
+    }
+    int gtaWrap(int index){int n=(int)gtaRows.size();if(n<=0)return 0;index%=n;if(index<0)index+=n;return index;}
+    void gtaWarmText(int row){
+        if(row<0||row>=(int)gtaRows.size())return;
+        const GtaStation& station=gta[gtaRows[row]];
+        lab(F30,trunc(F30,station.name,780,true),Pal::text,true);
+        lab(F17,trunc(F17,station.genre,780),Pal::dim,false);
+    }
+    void gtaRebuild(){
+        for(int i=0;i<GTA_NG;i++)gtaCnt[i]=0;
+        for(auto& st:gta){int gi=gtaGameIdx(st.game);if(gi<GTA_NG)gtaCnt[gi]++;}
+        gtaCntN=gta.size();
+        if(gtaGame<0||gtaGame>=GTA_NG)gtaGame=0;
+        gtaRows.clear();
+        for(size_t i=0;i<gta.size();i++)if(gtaGameIdx(gta[i].game)==gtaGame)gtaRows.push_back((int)i);
+        gtaSel=std::max(0,std::min(gtaSel,std::max(0,(int)gtaRows.size()-1)));
+    }
+    void gtaInit(){
+        gGtaSfx.load(0,"sfx/change-station-sa.mp3",2.5f);
+        gGtaSfx.load(1,"sfx/change-station-vc.mp3",2.5f);
+        gGtaSfx.load(2,"sfx/init.mp3",2.0f);
+        std::map<std::string,std::vector<GtaStation>> catalog;
+        if(gtaLoadCatalog(catalog)){
+            for(int i=0;i<GTA_NG;i++){
+                auto it=catalog.find(GTA_GAMES[i].key);
+                if(it==catalog.end())continue;
+                for(auto& station:it->second)gta.push_back(station);
+            }
+            gtaReady=!gta.empty();
+        } else {
+            std::string body;
+            if(readFile(gCacheDir+"gta_live.json",body)){
+                GtaRes result=parseGtaStatus(body);
+                if(result.ok){
+                    for(auto& station:result.v)if(gtaGameIdx(station.game)<GTA_NG)gta.push_back(station);
+                    gtaReady=!gta.empty();
+                }
+            }
+        }
+        gtaRebuild();
+        for(int i=0;i<GTA_NG;i++){
+            std::string cover=gtaCover2(GTA_GAMES[i].key);
+            if(!cover.empty())gtaTex2(cover,384);
+            std::string logo=gtaGLogo2(GTA_GAMES[i].key);
+            if(!logo.empty())gtaTex2(logo,256);
+        }
+        gtaReady=true;gtaRebuild();
+    }
+    void gtaRequest(){if(gtaSlot.busy.exchange(true))return;gtaWorker.post([this]{gtaSlot.put(fetchGtaLive());});}
+    void gtaSetSel(int row){
+        int count=(int)gtaRows.size();if(count<=0)return;
+        int next=gtaWrap(row);if(next==gtaSel)return;
+        gtaSel=next;gtaWarmText(next);audio.sfx.trigger(Sfx::TICK);
+    }
+    void gtaMove(int delta){gtaSetSel(gtaSel+delta);}
+    void gtaEnterGame(int gi){
+        if(gi<0||gi>=GTA_NG)return;
+        if(gtaCnt[gi]<=0){
+            if(!gtaReady){gtaRequest();toast("GTA Radio catalog is loading",Pal::dim);}
+            else toast(std::string(GTA_GAMES[gi].label)+" · Coming soon",Pal::warm);
+            audio.sfx.trigger(Sfx::BACK);return;
+        }
+        gtaGame=gi;gtaPick=gi;gtaRows.clear();
+        for(size_t i=0;i<gta.size();i++)if(gtaGameIdx(gta[i].game)==gtaGame)gtaRows.push_back((int)i);
+        gtaSel=0;gtaCar=0;gtaCarDrag=false;gtaView=1;
+        for(int index:gtaRows)gtaTex2(gtaLogoRel(gta[index].mount),256);
+        gtaWarmText(0);
+        audio.sfx.trigger(Sfx::POP);
+    }
+    void gtaBackToShelf(){
+        if(gtaView==0)return;
+        gtaView=0;gtaCarDrag=false;audio.sfx.trigger(Sfx::BACK);
+    }
+    void gtaNextGame(int delta){
+        for(int k=1;k<=GTA_NG;k++){
+            int gi=(gtaGame+delta*k+GTA_NG*GTA_NG)%GTA_NG;
+            if(gtaCnt[gi]>0){gtaEnterGame(gi);return;}
+        }
+    }
+    void gtaMoveCard(int dx,int dy){
+        int row=gtaPick/4,col=gtaPick%4;
+        int cols=row==1?2:4;
+        if(dx)col=(col+dx+cols)%cols;
+        if(dy){row=1-row;if(row==1&&col>1)col=1;}
+        int next=row*4+col;
+        if(next>=GTA_NG)next=GTA_NG-1;
+        if(next!=gtaPick){gtaPick=next;audio.sfx.trigger(Sfx::TICK);}
+    }
+    void enterGta(){
+        if(gtaMode)return;
+        if(cleanMode)setClean(false);
+        gtaMode=true;
+        homeMode=false;home.latch=false;globe.home=false;globe.flying=false;
+        screen=SCR_GLOBE;rebuildRows(false);
+        gtaView=0;gtaViewMix=0;gtaPick=gtaGame;gtaCarDrag=false;
+        gtaPoll=0;if(!gtaReady)gtaRequest();
+        audio.sfx.trigger(Sfx::POP);
+    }
+    void exitGta(){
+        if(!gtaMode)return;
+        gtaMode=false;gtaCarDrag=false;audio.sfx.trigger(Sfx::BACK);
+    }
+    void gtaPlayCore(const std::string& id,const std::string& title,const std::string& url,const std::string& place){
+        std::string mount=id.rfind("gta:",0)==0?id.substr(4):"";
+        std::string game=mount.substr(0,mount.find('/'));
+        std::string stream=url;
+        if(stream.empty()&&!mount.empty())stream=std::string(GTA_AUDIO)+"/"+mount;
+        if(stream.empty()){toast("Stream URL missing",Pal::danger);return;}
+        now=Now{id,title,place,"","GTA Radio","",stream,0.f,0.f,gtaLocalOffsetMin(),true,true};
+        nowGta=true;gtaNowMount=mount;
+        failNotified=false;tuneAnim=0;nowWx=WxRes{};stLeave();
+        globe.setSelected("");globe.setSelPoint(0,0,false);refreshClocks();
+        if(state.uiSounds){
+            if(game=="sa")gGtaSfx.trigger(0);
+            else if(game=="vc"||game=="vcs")gGtaSfx.trigger(1);
+            else audio.sfx.trigger(Sfx::SWEEP);
+        }
+        std::vector<std::string> c;
+        c.push_back(stream);
+        c.push_back(std::string("http://185.221.215.185:8000/")+mount);
+        if(stream.rfind("https://",0)==0)c.push_back("http://"+stream.substr(8));
+        player.startList(c);
+        if(screen==SCR_LIB&&libTab==LT_HIST)histView=player.hist();
+    }
+    void gtaPlay(int row){
+        if(row<0||row>=(int)gtaRows.size())return;
+        const GtaStation& st=gta[gtaRows[row]];gtaPlayCore("gta:"+st.mount,st.name,st.url,gtaGameLabel(st.game));
+    }
+    void gtaRandom(){
+        if(gtaRows.empty())return;
+        int row=(int)randIndex(gtaRows.size());gtaSetSel(row);gtaPlay(row);
+    }
+    void gtaFav(){
+        if(nowGta&&now.valid){Channel ch{now.chId,now.title,now.url,"",now.place,"GTA Radio","",0,0};toggleFav(ch);return;}
+        if(gtaSel<0||gtaSel>=(int)gtaRows.size())return;
+        const GtaStation& st=gta[gtaRows[gtaSel]];
+        Channel ch{"gta:"+st.mount,st.name,st.url,"",gtaGameLabel(st.game),"GTA Radio","",0,0};toggleFav(ch);
+    }
+    void gtaUpdate(float dt){
+        gtaUploadPx();
+        GtaRes res;
+        if(gtaSlot.take(res)&&res.ok){
+            std::string selectedMount;
+            if(gtaView==1&&gtaSel>=0&&gtaSel<(int)gtaRows.size()){
+                int index=gtaRows[gtaSel];
+                if(index>=0&&index<(int)gta.size())selectedMount=gta[index].mount;
+            }
+            bool added=false;
+            for(auto& live:res.v){
+                if(gtaGameIdx(live.game)>=GTA_NG)continue;
+                bool found=false;
+                for(auto& station:gta)if(station.mount==live.mount){
+                    station.title=live.title;station.listeners=live.listeners;station.bitrate=live.bitrate;found=true;break;
+                }
+                if(!found){gta.push_back(live);added=true;}
+            }
+            gtaReady=true;
+            if(added){
+                gtaRebuild();
+                if(gtaView==1&&!selectedMount.empty())for(size_t i=0;i<gtaRows.size();i++){
+                    if(gta[gtaRows[i]].mount==selectedMount){gtaSel=(int)i;break;}
+                }
+            }
+        }
+        if(!(gtaMode||nowGta))return;
+        gtaPoll-=dt;
+        if(gtaPoll<=0&&!gtaSlot.busy.load()){gtaPoll=25.f;gtaRequest();}
+    }
+    void gtaCarUpdate(float dt){
+        if(gtaCntN!=gta.size()){
+            gtaCntN=gta.size();
+            for(int i=0;i<GTA_NG;i++)gtaCnt[i]=0;
+            for(auto& st:gta){int gi=gtaGameIdx(st.game);if(gi<GTA_NG)gtaCnt[gi]++;}
+        }
+        if(!gtaFxInit){gtaFxInit=true;for(int i=0;i<GTA_NG;i++)gtaFx2[i].ph=i*1.37f;}
+        gtaMix=lerpf(gtaMix,gtaMode?1.f:0.f,1-powf(.00004f,dt));
+        if(gtaMode&&gtaMix>.995f)gtaMix=1.f;
+        if(!gtaMode&&gtaMix<.005f)gtaMix=0.f;
+        gtaViewMix=lerpf(gtaViewMix,gtaView?1.f:0.f,1-powf(.00002f,dt));
+        if(gtaView&&gtaViewMix>.995f)gtaViewMix=1.f;
+        if(!gtaView&&gtaViewMix<.005f)gtaViewMix=0.f;
+        for(int i=0;i<GTA_NG;i++){
+            GtaFx2& f=gtaFx2[i];
+            bool selected=(gtaMode&&gtaView==0&&i==gtaPick);
+            HomeMenu::spring(f.lift,f.liftV,selected?-13.f:0.f,170.f,2e-5f,dt);
+            HomeMenu::spring(f.sc,f.scV,selected?1.06f:.92f,150.f,4e-5f,dt);
+            f.glow=lerpf(f.glow,selected?1.f:0.f,1-powf(.0025f,dt));
+        }
+        int n=(int)gtaRows.size();
+        if(n<=0){gtaCar=0;return;}
+        while(gtaCar<0)gtaCar+=n;
+        while(gtaCar>=n)gtaCar-=n;
+        if(!gtaCarDrag){
+            float delta=(float)gtaSel-gtaCar;
+            while(delta>n*.5f)delta-=n;
+            while(delta<-n*.5f)delta+=n;
+            gtaCar+=delta*(1-powf(.00002f,dt));
+            if(fabsf(delta)<.002f)gtaCar=(float)gtaSel;
+            while(gtaCar<0)gtaCar+=n;
+            while(gtaCar>=n)gtaCar-=n;
+        }
+    }
+
+    void drawGtaShelf2(float amount){
+        if(amount<.01f)return;
+        auto AL=[&](int value){return (int)clampf(value*amount,0.f,255.f);};
+        static std::vector<Vec2> outline;
+        const float cardW=170.f,cardH=170.f,depth=16.f;
+        for(int i=0;i<GTA_NG;i++){
+            const GtaGameDef& game=GTA_GAMES[i];GtaFx2& fx=gtaFx2[i];
+            bool available=gtaCnt[i]>0;int col=i%4,row=i/4;
+            float centerCol=row==1?0.5f:1.5f;
+            float cx=640.f+(col-centerCol)*250.f,cy=205.f+row*252.f;
+            float bob=sinf(t*.8f+fx.ph)*(2.2f+2.f*fx.glow);
+            float yaw=(col<2?-.06f:.06f)+sinf(t*.4f+fx.ph)*.02f;
+            float pitch=(fx.glow>.5f?-.03f:.05f)+sinf(t*.6f+fx.ph)*.014f;
+            float scale=fx.sc;
+            if(fx.glow>.02f&&available)
+                HomeMenu::softEllipse(b,cx,cy+6,cardW*.80f*scale,cardH*.74f*scale,alpha(Pal::accent,(int)(46*fx.glow*amount)),24);
+            HomeMenu::softEllipse(b,cx+5,cy+cardH*.5f*scale+20,cardW*.42f*scale,8,alpha(C(0,0,0),AL(115)),20);
+            b.flush(ren);
+            HomeMenu::Xf xf;xf.set(cx,cy+bob+fx.lift,scale,pitch,yaw,sinf(t*.5f+fx.ph)*.012f);
+            HomeMenu::outline(cardW,cardH,16.f,outline);
+            int count=(int)outline.size();Vec2 front[32],back[32];
+            for(int q=0;q<count;q++){front[q]=xf.p(outline[q].x,outline[q].y,0.f);back[q]=xf.p(outline[q].x,outline[q].y,depth);}
+            Vec2 fc=xf.p(0,0,0.f),bc=xf.p(0,0,depth);
+            SDL_Color top=mixc(C(34,38,50),C(46,60,92),fx.glow*.55f);
+            SDL_Color bottom=mixc(C(13,15,21),C(16,22,38),fx.glow*.55f);
+            SDL_Color side=mixc(C(7,8,12),C(10,14,26),fx.glow*.5f);
+            {
+                int base=b.vert(bc.x,bc.y,alpha(side,AL(255))),first=-1,prev=-1;
+                for(int q=0;q<count;q++){
+                    int id=b.vert(back[q].x,back[q].y,alpha(side,AL(255)));
+                    if(first<0)first=id;
+                    if(prev>=0)b.tri(base,prev,id);
+                    prev=id;
+                }
+                b.tri(base,prev,first);
+            }
+            for(int q=0;q<count;q++){
+                int q2=(q+1)%count;
+                float shade=clampf(.5f-outline[q].y/cardH,0.f,1.f);
+                b.quad(front[q].x,front[q].y,front[q2].x,front[q2].y,back[q2].x,back[q2].y,back[q].x,back[q].y,
+                      alpha(mixc(side,C(26,30,42),shade*.55f),AL(255)));
+            }
+            {
+                int base=b.vert(fc.x,fc.y,alpha(mixc(top,bottom,.5f),AL(255))),ids[32];
+                for(int q=0;q<count;q++){
+                    float u=clampf(outline[q].y/cardH+.5f,0.f,1.f);
+                    ids[q]=b.vert(front[q].x,front[q].y,alpha(mixc(top,bottom,u),AL(255)));
+                }
+                for(int q=0;q<count;q++)b.tri(base,ids[q],ids[(q+1)%count]);
+            }
+            b.flush(ren);
+            int iw=(int)(cardW*scale*.94f),ih=(int)(cardH*scale*.94f);
+            SDL_Rect dst{(int)(fc.x-iw/2),(int)(fc.y-ih/2),iw,ih};
+            std::string cover=gtaCover2(game.key);
+            if(!cover.empty()){
+                gtaCoverFill(cover,dst,384,AL(255),available?255:96);
+                if(cover.find("_background")!=std::string::npos){
+                    std::string logo=gtaGLogo2(game.key);
+                    if(!logo.empty())gtaLogo(logo,SDL_Rect{(int)(fc.x-iw*.36f),(int)(fc.y-ih*.15f),(int)(iw*.72f),(int)(ih*.30f)},256,AL(255),available?255:110);
+                }
+            } else {
+                b.rrect2((float)dst.x,(float)dst.y,(float)dst.w,(float)dst.h,8,8,alpha(mixc(C(20,24,34),Pal::accent,.18f),AL(255)));
+                b.flush(ren);
+                txt(F30,upperStr(std::string(game.key)),(int)fc.x,(int)fc.y-16,alpha(Pal::accentSoft,AL(available?230:90)),true,1);
+            }
+            if(!available){
+                b.rrect2(fc.x-68,fc.y+ih*.5f-30,136,24,6,6,alpha(C(0,0,0),AL(190)));
+                b.flush(ren);
+                txt(F15,"COMING SOON",(int)fc.x,(int)(fc.y+ih*.5f-25),alpha(Pal::warm,AL(215)),true,1);
+            }
+            SDL_Color edge=mixc(alpha(Pal::wire,60),Pal::accentSoft,fx.glow*(available?1.f:.2f));
+            for(int q=0;q<count;q++){
+                int q2=(q+1)%count;
+                b.line(front[q].x,front[q].y,front[q2].x,front[q2].y,1.6f,alpha(edge,AL(200)));
+            }
+            b.flush(ren);
+            hit(H_GTA_GAME,(int)(cx-cardW*.5f*scale),(int)(cy-cardH*.5f*scale),(int)(cardW*scale),(int)(cardH*scale),i);
+        }
+    }
+    void drawGtaCarousel(float amount){
+        if(amount<.01f)return;
+        int count=(int)gtaRows.size();
+        const float centerX=640.f,centerY=296.f,spacing=330.f,baseW=360.f,baseH=320.f;
+        if(count<=0){Icon::spinner(b,centerX,centerY,20,t*4,alpha(Pal::accent,(int)(200*amount)));b.flush(ren);return;}
+        for(int pass=0;pass<2;pass++){
+            for(int i=0;i<count;i++){
+                float delta=(float)i-gtaCar;
+                while(delta>count*.5f)delta-=count;
+                while(delta<-count*.5f)delta+=count;
+                float distance=fabsf(delta);
+                if(distance>2.55f)continue;
+                bool center=distance<=.5f;
+                if(pass==0?!center:center)continue;
+                float sign=delta<0?-1.f:1.f;
+                float k=distance<=1.f?distance:1.f+(distance-1.f)*.72f;
+                float x=centerX+sign*k*spacing;
+                float scale=distance<=1.f?lerpf(1.f,.52f,distance):lerpf(.52f,.30f,clampf(distance-1.f,0.f,1.f));
+                float opacity=distance<=1.f?lerpf(1.f,.46f,distance):lerpf(.46f,.16f,clampf(distance-1.f,0.f,1.f));
+                float brightness=distance<=1.f?lerpf(255.f,118.f,distance):lerpf(118.f,72.f,clampf(distance-1.f,0.f,1.f));
+                int width=(int)(baseW*scale),height=(int)(baseH*scale);
+                if(x+width*.5f<-40||x-width*.5f>W+40)continue;
+                SDL_Rect box{(int)(x-width*.5f),(int)(centerY-height*.5f),width,height};
+                const GtaStation& station=gta[gtaRows[i]];
+                gtaLogo(gtaLogoRel(station.mount),box,256,(int)(255*opacity*amount),(int)brightness);
+                hit(H_GTA_ROW,box.x,box.y,box.w,box.h,i);
+            }
+        }
+        float fraction=fabsf(gtaCar-floorf(gtaCar+.5f));
+        int textAlpha=(int)(255*clampf(1.f-fraction*2.f,0.f,1.f)*amount);
+        if(textAlpha>2&&gtaSel>=0&&gtaSel<count){
+            const GtaStation& station=gta[gtaRows[gtaSel]];
+            txt(F30,trunc(F30,station.name,780,true),(int)centerX,505,alpha(Pal::text,textAlpha),true,1);
+            txt(F17,trunc(F17,station.genre,780),(int)centerX,548,alpha(Pal::dim,(int)(textAlpha*.82f)),false,1);
+            if(nowGta&&gtaNowMount==station.mount){
+                bool live=player.state==Player::PLAYING;float pulse=.5f+.5f*sinf(t*3.f);
+                int dotAlpha=(int)(textAlpha*(live?(.55f+.45f*pulse):.45f));
+                b.circle(centerX,588,3.6f,alpha(live?Pal::live:Pal::faint,dotAlpha),8);b.flush(ren);
+            }
+        }
+    }
+    void drawGta(){
+        float amount=easeOut(gtaMix);if(amount<.004f)return;
+        float view=easeOut(clampf(gtaViewMix,0.f,1.f));
+        SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(ren,0,0,0,(Uint8)(255*amount));
+        SDL_Rect full{0,0,W,H};SDL_RenderFillRect(ren,&full);
+        float shelfAmount=amount*(1.f-view);
+        if(shelfAmount>.01f){
+            b.gradRect(0,0,W,H*.75f,alpha(C(18,24,58),(int)(70*shelfAmount)),alpha(C(0,0,0),0));
+            b.flush(ren);
+        }
+        if(view<.995f)drawGtaShelf2(shelfAmount);
+        if(view>.005f)drawGtaCarousel(amount*view);
+    }
+
     void setClean(bool on){
         if(cleanMode==on)return;
+        if(on&&gtaMode)exitGta();
         cleanMode=on; globe.zen=on;
         if(on){
             screen=SCR_GLOBE;
@@ -2868,48 +3657,75 @@ std::map<std::string,Uint32> flagUse;
         return res;
     }
     void evictLabs(){
-        for(auto it=labs.begin();it!=labs.end();){
-            if(it->second.use+240<frameNo){
-                for(auto& p:it->second.p)if(p.tex)SDL_DestroyTexture(p.tex);
-                it=labs.erase(it);
-            } else ++it;
+        if(labs.size()<=1500)return;
+        std::vector<std::pair<Uint32,std::string>> v;
+        v.reserve(labs.size());
+        for(auto& kv:labs)if(kv.second.use!=frameNo)v.push_back({kv.second.use,kv.first});
+        if(v.empty())return;
+        size_t n=std::min<size_t>(400,v.size());
+        std::partial_sort(v.begin(),v.begin()+n,v.end());
+        for(size_t i=0;i<n;i++){
+            auto it=labs.find(v[i].second);
+            if(it==labs.end())continue;
+            for(auto& p:it->second.p)if(p.tex)SDL_DestroyTexture(p.tex);
+            labs.erase(it);
         }
-        if(labs.size()>1600){
-            for(auto& kv:labs)for(auto& p:kv.second.p)if(p.tex)SDL_DestroyTexture(p.tex);
-            labs.clear();
+    }
+    Lab& lab(int fi,const std::string& s,SDL_Color c,bool bold){
+        std::string key=keyOf(fi,bold,s);key+="|";
+        key+=std::to_string((int)c.r)+","+std::to_string((int)c.g)+","+std::to_string((int)c.b);
+        auto it=labs.find(key);
+        if(it==labs.end()){
+            if(labs.size()>1500&&frameNo-labEvictAt>30){labEvictAt=frameNo;evictLabs();}
+            Lab created;
+            for(auto& run:runs(fi,s)){
+                TTF_Font* font=fonts.get(fi,run.fam);
+                if(!font)continue;
+                TTF_SetFontStyle(font,bold?TTF_STYLE_BOLD:TTF_STYLE_NORMAL);
+                SDL_Color solid=c;solid.a=255;
+                SDL_Surface* surface=TTF_RenderUTF8_Blended(font,run.text.c_str(),solid);
+                if(!surface)continue;
+                Piece piece;piece.tex=SDL_CreateTextureFromSurface(ren,surface);piece.w=surface->w;piece.h=surface->h;
+                SDL_FreeSurface(surface);
+                if(!piece.tex)continue;
+                created.w+=piece.w;
+                if(piece.h>created.h)created.h=piece.h;
+                created.p.push_back(piece);
+            }
+            it=labs.emplace(key,std::move(created)).first;
         }
+        it->second.use=frameNo;
+        return it->second;
     }
     void txt(int fi,const std::string& s,int x,int y,SDL_Color c,bool bold=false,int align=0){
         if(s.empty()||c.a==0)return;
-        std::string k=keyOf(fi,bold,s); k+="|";
-        k+=std::to_string((int)c.r)+","+std::to_string((int)c.g)+","+std::to_string((int)c.b);
-        auto it=labs.find(k);
-        if(it==labs.end()){
-            if(labs.size()>1000)evictLabs();
-            Lab L;
-            for(auto& r:runs(fi,s)){
-                TTF_Font* f=fonts.get(fi,r.fam); if(!f)continue;
-                TTF_SetFontStyle(f,bold?TTF_STYLE_BOLD:TTF_STYLE_NORMAL);
-                SDL_Color sol=c; sol.a=255;
-                SDL_Surface* su=TTF_RenderUTF8_Blended(f,r.text.c_str(),sol);
-                if(!su)continue;
-                Piece pc; pc.tex=SDL_CreateTextureFromSurface(ren,su); pc.w=su->w; pc.h=su->h;
-                SDL_FreeSurface(su);
-                if(!pc.tex)continue;
-                L.w+=pc.w; if(pc.h>L.h)L.h=pc.h;
-                L.p.push_back(pc);
-            }
-            it=labs.emplace(k,std::move(L)).first;
+        Lab& cached=lab(fi,s,c,bold);
+        int cx=align==1?x-cached.w/2:(align==2?x-cached.w:x);
+        for(auto& piece:cached.p){
+            if(!piece.tex)continue;
+            SDL_Rect dst{cx,y,piece.w,piece.h};
+            SDL_SetTextureAlphaMod(piece.tex,c.a);
+            SDL_RenderCopy(ren,piece.tex,nullptr,&dst);
+            cx+=piece.w;
         }
-        Lab& L=it->second; L.use=frameNo;
-        int cx=align==1?x-L.w/2:(align==2?x-L.w:x);
-        for(auto& pc:L.p){
-            if(!pc.tex)continue;
-            SDL_Rect d{cx,y,pc.w,pc.h};
-            SDL_SetTextureAlphaMod(pc.tex,c.a);
-            SDL_RenderCopy(ren,pc.tex,nullptr,&d);
-            cx+=pc.w;
-        }
+    }
+    void marquee(int fi,const std::string& s,int x,int y,int maxW,SDL_Color c,
+                 bool bold=false,float speed=44.f){
+        if(s.empty()||maxW<=8||c.a==0)return;
+        int full=tw(fi,s,bold);
+        if(full<=maxW){ txt(fi,s,x,y,c,bold); return; }
+        const float gap=56.f, hold=1.15f;
+        float L=(float)full+gap, T=L/speed+hold;
+        float ph=fmodf(t,T);
+        float off=(ph<hold)?0.f:(ph-hold)*speed;
+        SDL_Rect old; SDL_RenderGetClipRect(ren,&old);
+        SDL_Rect clip{x,y-2,maxW,(int)(FONT_PX[fi]*1.7f)+2};
+        SDL_RenderSetClipRect(ren,&clip);
+        int ix=x-(int)off;
+        txt(fi,s,ix,y,c,bold);
+        if(off>L-(float)maxW)txt(fi,s,ix+(int)L,y,c,bold);
+        if(old.w>0&&old.h>0)SDL_RenderSetClipRect(ren,&old);
+        else SDL_RenderSetClipRect(ren,nullptr);
     }
     void clearLabs(){
         for(auto& kv:labs)for(auto& p:kv.second.p)if(p.tex)SDL_DestroyTexture(p.tex);
@@ -2971,10 +3787,13 @@ std::map<std::string,Uint32> flagUse;
         if(iso.empty())return;
         std::string low=lowerStr(iso);
         if(flagTex.count(low)||flagTried.count(low))return;
-        if(flagSlot.busy.load()&&flagReq==low)return;
-        if(flagSlot.busy.exchange(true))return;
-        flagReq=low;
-        worker.post([this,low]{
+        {
+            std::lock_guard<std::mutex> lk(flagMtx);
+            if(flagPending.count(low))return;
+            flagPending.insert(low);
+        }
+        Worker& w=flagWorker[(flagRR++)&1];
+        w.post([this,low]{
             FlagRes r; r.iso=low;
             std::string path=gCacheDir+"flags/"+low+".png",body;
             if(!readFile(path,body)){
@@ -2982,26 +3801,63 @@ std::map<std::string,Uint32> flagUse;
                 if(body.size()>8){ makeDirs(gCacheDir+"flags"); writeFile(path,body); }
             }
             if(body.size()>8)r.ok=decodePNG(body,r.w,r.h,r.rgba);
-            flagSlot.put(std::move(r));
+            std::lock_guard<std::mutex> lk(flagMtx);
+            flagQ.push_back(std::move(r));
         });
     }
+    void ppPrefetchFlags(){
+        for(auto& ck:pp.countries){
+            if(ck.empty()||ck.rfind("n:",0)==0)continue;
+            std::string low=lowerStr(ck);
+            if(flagTex.count(low))continue;
+            std::string body;
+            if(readFile(gCacheDir+"flags/"+low+".png",body)&&body.size()>8){
+                FlagRes r; r.iso=low;
+                if(decodePNG(body,r.w,r.h,r.rgba)&&r.w>0&&r.h>0){
+                    gFlagPal[low]=pcPalFromPixels(r.rgba,r.w,r.h);
+                    SDL_Texture* tx=SDL_CreateTexture(ren,SDL_PIXELFORMAT_ABGR8888,SDL_TEXTUREACCESS_STATIC,r.w,r.h);
+                    if(tx){
+                        SDL_UpdateTexture(tx,nullptr,r.rgba.data(),r.w*4);
+                        SDL_SetTextureBlendMode(tx,SDL_BLENDMODE_BLEND);
+                        flagTex[low]=tx; flagUse[low]=frameNo;
+                    }
+                }
+                flagTried.insert(low);
+            } else requestFlag(low);
+        }
+    }
+
 void pollAsync(){
     WxRes wr; if(wxSlot.take(wr)){ wxCache[wxKey]=wr; nowWx=wr; }
-    FlagRes fr;
-    if(flagSlot.take(fr)){
+    for(;;){
+        FlagRes fr; bool have=false;
+        {
+            std::lock_guard<std::mutex> lk(flagMtx);
+            if(!flagQ.empty()){
+                fr=std::move(flagQ.front());flagQ.pop_front();
+                flagPending.erase(fr.iso);
+                have=true;
+            }
+        }
+        if(!have)break;
         flagTried.insert(fr.iso);
         if(fr.ok&&fr.w>0&&fr.h>0){
             gFlagPal[fr.iso]=pcPalFromPixels(fr.rgba,fr.w,fr.h);
             SDL_Texture* tx=SDL_CreateTexture(ren,SDL_PIXELFORMAT_ABGR8888,SDL_TEXTUREACCESS_STATIC,fr.w,fr.h);
-            if(tx){ SDL_UpdateTexture(tx,nullptr,fr.rgba.data(),fr.w*4);
-                SDL_SetTextureBlendMode(tx,SDL_BLENDMODE_BLEND); flagTex[fr.iso]=tx; flagUse[fr.iso]=frameNo; }
+            if(tx){
+                SDL_UpdateTexture(tx,nullptr,fr.rgba.data(),fr.w*4);
+                SDL_SetTextureBlendMode(tx,SDL_BLENDMODE_BLEND);
+                flagTex[fr.iso]=tx; flagUse[fr.iso]=frameNo;
+            }
         }
-        if(flagTex.size()>48){
-            std::string old; Uint32 best=0xFFFFFFFFu;
-            for(auto& kv:flagUse)if(flagTex.count(kv.first)&&kv.second<best){best=kv.second;old=kv.first;}
-            if(!old.empty()){ auto d=flagTex.find(old);
-                if(d!=flagTex.end()){SDL_DestroyTexture(d->second);flagTex.erase(d);}
-                flagUse.erase(old); flagTried.erase(old); }
+    }
+    if(flagTex.size()>128){
+        std::string old; Uint32 best=0xFFFFFFFFu;
+        for(auto& kv:flagUse)if(flagTex.count(kv.first)&&kv.second<best){best=kv.second;old=kv.first;}
+        if(!old.empty()){
+            auto d=flagTex.find(old);
+            if(d!=flagTex.end()){SDL_DestroyTexture(d->second);flagTex.erase(d);}
+            flagUse.erase(old); flagTried.erase(old);
         }
     }
     GeoRes gr;
@@ -3039,6 +3895,159 @@ void pollAsync(){
             if(x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h)return uiHits[i].data; }
         return 0;
     }
+    int touchZone(float x,float y){
+        if(gtaMode&&gtaMix>.4f)return TZ_GTA;
+        if(pcOpen&&pcMix>.4f)return TZ_CARD;
+        if(passportOpen&&passportMix>.4f)return TZ_PASSPORT;
+        if(homeMode)return TZ_HOME;
+        if(nowCardOn&&x>=nowCardRect.x&&x<nowCardRect.x+nowCardRect.w&&
+           y>=nowCardRect.y&&y<nowCardRect.y+nowCardRect.h)return TZ_UI;
+        if(panel>.5f){
+            if(panelListOn&&x>=panelListRect.x&&x<panelListRect.x+panelListRect.w&&
+               y>=panelListRect.y&&y<panelListRect.y+panelListRect.h)return TZ_LIST;
+            if(x>=panelX())return TZ_UI;
+        }
+        return TZ_GLOBE;
+    }
+    int touchPick(float x,float y){
+        int best=-1; float bd=44.f*44.f;
+        for(size_t i=0;i<globe.pp.size();i++){
+            if(globe.pz[i]<=0)continue;
+            float dx=globe.pp[i].x-x,dy=globe.pp[i].y-y,d=dx*dx+dy*dy;
+            if(d<bd){bd=d;best=(int)i;}
+        }
+        return best;
+    }
+    void touchHit(int id,int data){
+        switch(id){
+        case H_PLAYPAUSE: player.togglePause(); break;
+        case H_FAVNOW: if(now.valid){Channel c{now.chId,now.title,now.url,now.placeId,now.place,now.country,now.cc,now.lat,now.lon}; toggleFav(c);} break;
+        case H_PLACE: { const Place* p=placeById(now.placeId); if(p)openCity(*p); } break;
+        case H_BACK: pressBack(); break;
+        case H_ROW: if(data>=0&&data<(int)selRows.size()){ selIdx=data; scrollManual=false; activate(); } break;
+        case H_FIELD: openInput(); break;
+        case H_RETRY: placesError=false; startPlaces(); break;
+        case H_TAB: if(screen==SCR_LIB&&data>=0&&data<4){ libTab=data; if(libTab==LT_HIST)histView=player.hist(); audio.sfx.trigger(Sfx::TICK); rebuildRows(false);} break;
+        case H_HOME: if(homeMode){ if(data==home.sel)homeActivate(); else { while(home.sel!=data)home.move(data>home.sel?1:-1); audio.sfx.trigger(Sfx::TICK);} } break;
+        case H_CARD: pcShow(curCity); break;
+        case H_PC_CLOSE: pcClose(); break;
+        case H_PC_RETRY: pcRetry(); break;
+        case H_HIST: openLib(LT_HIST); break;
+        case H_SLEEP: cycleSleep(); break;
+        case H_PC_NOW: { const Place* p=placeById(now.placeId); if(p)pcShow(*p); } break;
+        case H_PP_BACK: closePassport(); break;
+        case H_PP_PREV: ppTurnPage(-1); break;
+        case H_PP_NEXT: ppTurnPage(1); break;
+        case H_ST_MAP: stMapUntil=t+8.f; closePassport(); break;
+        }
+    }
+    void touchTap(float x,float y){
+        wake();
+        if(nightMix>.5f)return;
+        int id=hitAt((int)x,(int)y),data=hitData((int)x,(int)y);
+        if(id==H_GTA_ROW){
+            if(gtaView==1&&!gtaRows.empty()&&data>=0&&data<(int)gtaRows.size()){
+                if(data==gtaSel){
+                    const GtaStation& station=gta[gtaRows[gtaSel]];
+                    if(nowGta&&gtaNowMount==station.mount)player.togglePause();
+                    else gtaPlay(gtaSel);
+                } else gtaSetSel(data);
+            }
+            return;
+        }
+        if(id==H_GTA_GAME){gtaPick=data;gtaEnterGame(data);return;}
+        if(id==H_GTA_BACK){gtaBackToShelf();return;}
+        if(id==H_GTA_PLAY){player.togglePause();return;}
+        if(id==H_GTA_FAV){gtaFav();return;}
+        if(id!=H_NONE){ touchHit(id,data); lastTapT=SDL_GetTicks(); lastTapP={x,y}; return; }
+        if(tZone==TZ_PASSPORT){
+            if(y<70.f||x<bookRect.x||x>bookRect.x+bookRect.w||y>bookRect.y+bookRect.h){ closePassport(); return; }
+            ppTurnPage(x<640.f?-1:1);
+            return;
+        }
+        if(tZone==TZ_CARD){
+            if(x<pcRect.x||x>pcRect.x+pcRect.w||y<pcRect.y||y>pcRect.y+pcRect.h)pcClose();
+            return;
+        }
+        if(tZone==TZ_GLOBE&&!homeMode&&placesReady){
+            int idx=touchPick(x,y);
+            if(idx>=0&&(size_t)idx<places.size()){ openCity(places[idx]); return; }
+            Uint32 now=SDL_GetTicks();
+            if(now-lastTapT<330&&fabsf(x-lastTapP.x)+fabsf(y-lastTapP.y)<48.f&&!cleanMode){
+                globe.zoomIdle=0; globe.flying=false;
+                globe.targetR=(globe.targetR>380.f)?190.f:Globe::DEF_R;
+                lastTapT=0;
+            } else { lastTapT=now; lastTapP={x,y}; }
+        }
+    }
+    void touchBegin(float x,float y,SDL_FingerID id){
+        tPrimary=id; tActive=true;
+        tStart=tPrev=tCur=Vec2{x,y};
+        tTravel=0; tDownT=SDL_GetTicks(); tLastMoveT=tDownT;
+        tZone=touchZone(x,y);
+        if(tZone==TZ_LIST)scrollVel=0;
+    }
+    void touchMove(float x,float y){
+        if(!tActive)return;
+        float dx=x-tPrev.x,dy=y-tPrev.y;
+        tCur={x,y}; tTravel+=fabsf(dx)+fabsf(dy); tPrev={x,y};
+        if(tTravel<10.f)return;
+        idleT=0;
+        if(tZone==TZ_GLOBE){
+            if(!homeMode&&!pcOpen&&!passportOpen)globe.drag(dx,dy);
+        } else if(tZone==TZ_LIST){
+            scrollManual=true;
+            scroll=clampf(scroll-dy,0.f,listScrollMax);
+            Uint32 now=SDL_GetTicks();
+            float edt=std::max(1.f,(float)(now-tLastMoveT))/1000.f;
+            tLastMoveT=now;
+            scrollVel=clampf(lerpf(scrollVel,-dy/edt,.55f),-2600.f,2600.f);
+        } else if(tZone==TZ_GTA&&gtaView==1){
+            int count=(int)gtaRows.size();
+            if(count>0){
+                if(!gtaCarDrag){gtaCarDrag=true;gtaCarStart=gtaCar;}
+                gtaCar-=dx/330.f;
+                while(gtaCar<0)gtaCar+=count;
+                while(gtaCar>=count)gtaCar-=count;
+            }
+        }
+    }
+    void touchEnd(float x,float y){
+        if(!tActive)return;
+        tActive=false;
+        Uint32 now=SDL_GetTicks();
+        float dx=x-tStart.x,dy=y-tStart.y;
+        if(tTravel<12.f&&now-tDownT<450){ touchTap(x,y); return; }
+        if(tZone==TZ_PASSPORT){
+            if(fabsf(dx)>60.f&&fabsf(dx)>fabsf(dy)*1.4f)ppTurnPage(dx<0?1:-1);
+            else if(dy>90.f&&fabsf(dy)>fabsf(dx)*1.4f)closePassport();
+        } else if(tZone==TZ_HOME){
+            if(fabsf(dx)>50.f&&fabsf(dx)>fabsf(dy)){ home.move(dx<0?1:-1); audio.sfx.trigger(Sfx::TICK); }
+        } else if(tZone==TZ_CARD){
+            if(dy>80.f&&fabsf(dy)>fabsf(dx))pcClose();
+        } else if(tZone==TZ_LIST){
+            if(now-tLastMoveT>90)scrollVel=0;
+        } else if(tZone==TZ_GTA){
+            if(gtaView==1){
+                if(dy>90.f&&fabsf(dy)>fabsf(dx)*1.4f){gtaBackToShelf();}
+                else{
+                    int count=(int)gtaRows.size();
+                    if(count>0){
+                        float move=gtaCar-gtaCarStart;
+                        while(move>count*.5f)move-=count;
+                        while(move<-count*.5f)move+=count;
+                        int step=(int)lroundf(move);
+                        if(step==0&&fabsf(dx)>50.f&&fabsf(dx)>fabsf(dy))step=(dx<0?1:-1);
+                        gtaSel=gtaWrap((int)lroundf(gtaCarStart)+step);
+                    }
+                }
+                gtaCarDrag=false;
+            } else {
+                if(fabsf(dx)>50.f&&fabsf(dx)>fabsf(dy)*1.3f)gtaMoveCard(dx<0?1:-1,0);
+                else if(fabsf(dy)>60.f&&fabsf(dy)>fabsf(dx)*1.3f)gtaMoveCard(0,dy<0?1:-1);
+            }
+        }
+    }
     float panelX(){ return (float)(W-24-PW)+(1-easeOut(panel))*(PW+80); }
     float panelH(){ return now.valid?312.f:(float)(H-84-24); }
     bool isFav(const std::string& id){ for(auto& f:state.favs)if(f.chId==id)return true; return false; }
@@ -3049,11 +4058,16 @@ void pollAsync(){
         globe.setSelected("");
         globe.setSelPoint(la,lo,(la!=0.f||lo!=0.f));
     }
-    void wake(){ idleT=0; if(nightMode){ nightMode=false; audio.sfx.trigger(Sfx::TICK); } }
-    void toggleLock(){
-        globe.locked=!globe.locked; audio.sfx.trigger(Sfx::LOCK);
-        toast(globe.locked?"Globe locked":"Globe unlocked",globe.locked?Pal::warm:Pal::dim);
+    void setScreenOff(bool on){
+        if(!lblInit||screenOff==on)return;
+        screenOff=on;
+        if(on){
+            lblGetCurrentBrightnessSetting(&savedBrightness);
+            lblSetCurrentBrightnessSetting(0.f);
+            toast("Screen off · audio keeps playing",Pal::dim);
+        } else lblSetCurrentBrightnessSetting(savedBrightness);
     }
+    void wake(){ if(screenOff)setScreenOff(false); idleT=0; if(nightMode){ nightMode=false; audio.sfx.trigger(Sfx::TICK); } }
     void openLib(int tab){
         if(cleanMode)setClean(false);
         screen=SCR_LIB; libTab=tab;
@@ -3102,6 +4116,7 @@ void pollAsync(){
     void rebuildRows(bool keepPos){
         int oldSel=selIdx; float oldScroll=scroll;
         rows.clear(); selRows.clear(); rowsH=0; selIdx=0; scroll=0; focusY=0;
+        scrollManual=false; scrollVel=0;
         if(screen==SCR_CITY){
             if(!cityRes.ch.empty()){
                 Row pc; pc.kind=6; pc.title="City postcard";
@@ -3158,7 +4173,7 @@ pc.sub="Open a keepsake of this city";
                 addHeader("CONTROLS");
                 addInfo("A select · B back","X favorite · Y random");
                 addInfo("− library · + search","hold − and + together: clean mode");
-                addInfo("ZL/ZR volume · L3 pause","R3 lock · D-pad left/right: tabs");
+                addInfo("ZL/ZR volume · L3 pause","D-pad left/right: tabs");
             }
         }
         if(keepPos&&!selRows.empty()){
@@ -3181,8 +4196,13 @@ pc.sub="Open a keepsake of this city";
         audio.sfx.uiOn=state.uiSounds; audio.sfx.hissOn=state.pauseHiss;
         globe.places=&places; globe.buildGrid(); globe.initCache(ren);
         buildBackground(); audio.open(&player);
+        lblInit=R_SUCCEEDED(lblInitialize());
         worker.start();
         pcWorker.start();
+        gtaWorker.start();
+        gtaImgWorker.start();
+        gtaInit();
+        flagWorker[0].start(); flagWorker[1].start();
         home.init();
         globe.home=true;
         globe.center=Vec2{Globe::HOME_CX,Globe::HOME_CY};
@@ -3231,6 +4251,13 @@ if(!sp.miiRgba.empty()&&sp.miiW>0&&sp.miiH>0){
 }
     ppSave(pp);
 }
+ppPrefetchFlags();
+buildCover();
+stBakeBudget=6;
+ensurePage(0);
+ensurePage(1);
+if(stPageCount()>2)ensurePage(2);
+stBakeBudget=0;
     }
     void updateEQ(float dt){
         if(player.state==Player::PLAYING){
@@ -3261,18 +4288,13 @@ if(!sp.miiRgba.empty()&&sp.miiW>0&&sp.miiH>0){
         float ka=1-powf(1e-6f,dt),kr=1-powf(.05f,dt);
         for(int k=0;k<NB;k++)eq[k]=lerpf(eq[k],eqT[k],eqT[k]>eq[k]?ka:kr);
     }
-    const Place* nearestPlace(float lat,float lon) const {
-        if(places.empty()||(lat==0&&lon==0))return nullptr;
-        const Place* best=nullptr; float bd=1e9f;
-        for(auto& p:places){ float d=distKm(lat,lon,p.lat,p.lon); if(d<bd){bd=d;best=&p;} }
-        return bd<=80.f?best:nullptr;
-    }
     void killPlace(const std::string& id){
         if(id.empty()||deadPlaces.count(id))return;
         deadPlaces.insert(id); deadDirty=true;
         places.erase(std::remove_if(places.begin(),places.end(),
             [&](const Place& p){return p.id==id;}),places.end());
         globe.buildPlaces();
+        placeIso.clear();
         syncSel();
     }
     void pollJobs(){
@@ -3284,6 +4306,7 @@ if(!sp.miiRgba.empty()&&sp.miiW>0&&sp.miiH>0){
                 placesReady=true; placesError=false;
                 state.placesVer=pr.version; touchState();
                 globe.buildPlaces();
+                placeIso.clear();
                 syncSel();
                 if(!geoAsked){ geoAsked=true; worker.post([this]{ geoSlot.put(fetchGeo()); }); }
                 if(!greeted){
@@ -3356,6 +4379,8 @@ if(!sp.miiRgba.empty()&&sp.miiW>0&&sp.miiH>0){
         worker.post([this,cp]{ citySlot.put(fetchCity(cp)); },true);
     }
     void play(const Channel& c){
+        if(c.id.rfind("gta:",0)==0){gtaPlayCore(c.id,c.title,c.url,c.place);return;}
+        nowGta=false;
         now=Now{c.id,c.title,c.place,c.placeId,c.country,c.cc,
                 c.url.empty()?rgStream(c.id):c.url,c.lat,c.lon,0,false,true};
         if(cityRes.placeId==c.placeId&&cityRes.haveOffset){ now.tzMin=cityRes.utcOffset; now.haveTz=true; }
@@ -3449,11 +4474,13 @@ stOnPlay(c);
 else if(r.kind==6)pcShow(curCity);
     }
     void moveSel(int d){
+        scrollManual=false;
         int n=(int)selRows.size(); if(n<=0)return;
         int old=selIdx; selIdx=(selIdx+d+n)%n;
         if(selIdx!=old)audio.sfx.trigger(Sfx::TICK);
     }
     void switchTab(int d){
+        scrollManual=false; scrollVel=0;
         if(screen!=SCR_LIB)return;
         libTab=(libTab+d+4)%4;
         if(libTab==LT_HIST)histView=player.hist();
@@ -3493,24 +4520,28 @@ else if(r.kind==6)pcShow(curCity);
     void update(float dt){
         pollJobs(); pollAsync(); updateEQ(dt); sky.update(dt); cleanUpdate(dt);
         pcUpdate(dt);
+        gtaUpdate(dt);
+        gtaCarUpdate(dt);
         homeMix=lerpf(homeMix,homeMode?1.f:0.f,1-powf(.0025f,dt));
+        if(homeMode&&homeMix>.999f)homeMix=1.f;
+        if(!homeMode&&homeMix<.001f)homeMix=0.f;
         home.update(dt,homeMode);
         if(homeMode){
-            globe.yaw+=dt*.018f;      
+            globe.yaw+=dt*.018f;
             globe.idle=0;
-            sky.nextShoot-=dt*1.6f;   
+            sky.nextShoot-=dt*1.6f;
             if(!globe.stOn)globe.stNext-=dt*4.f;
         }
         clockTimer-=dt;
         if(clockTimer<=0){ clockTimer=1.f; refreshClocks(); }
         idleT+=dt;
-if(state.autoNight&&!cleanMode&&!homeMode&&!pcOpen&&!passportOpen&&now.valid&&player.state==Player::PLAYING&&idleT>600.f)nightMode=true;
-if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
+if(state.autoNight&&!cleanMode&&!homeMode&&!pcOpen&&!passportOpen&&!gtaMode&&now.valid&&player.state==Player::PLAYING&&idleT>600.f)nightMode=true;
+if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen||gtaMode)nightMode=false;
         nightMix=lerpf(nightMix,nightMode?1.f:0.f,1-powf(.004f,dt));
         if(sleepMin>0&&sleepLeft>0){
             sleepLeft-=dt;
             if(sleepLeft<=0){
-                sleepLeft=0; sleepMin=0; player.stop(); now.valid=false; globe.setSelected(""); globe.setSelPoint(0,0,false);
+                sleepLeft=0; sleepMin=0; player.stop(); now.valid=false; nowGta=false; globe.setSelected(""); globe.setSelPoint(0,0,false);
                 nightMode=!cleanMode&&!homeMode; toast("Sleep timer ended · good night",Pal::warm);
             }
         }
@@ -3533,7 +4564,7 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
                 if(!home.latch&&fabsf(lx)>.55f){ home.move(lx>0?1:-1); audio.sfx.trigger(Sfx::TICK); home.latch=true; }
                 if(fabsf(lx)<.30f)home.latch=false;
             }
-        } else if(!globe.locked&&!nightMode&&(screen==SCR_GLOBE||cleanMode)){
+        } else if(!globe.locked&&!nightMode&&!gtaMode&&(screen==SCR_GLOBE||cleanMode)){
             float rx=0,ry=0;
             float zk=globe.inputK();
             if(pad){
@@ -3545,8 +4576,8 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
             if(rx||ry){ globe.flying=false; globe.idle=0;
                 globe.yaw+=rx*dt*zk; globe.pitch=clampf(globe.pitch+ry*dt*zk,-1.35f,1.35f); idleT=0; }
         }
-        if(br&&!cleanMode&&!homeMode){ globe.zoomHold(1,dt); idleT=0; }
-        if(bl&&!cleanMode&&!homeMode){ globe.zoomHold(-1,dt); idleT=0; }
+        if(br&&!cleanMode&&!homeMode&&!gtaMode){ globe.zoomHold(1,dt); idleT=0; }
+        if(bl&&!cleanMode&&!homeMode&&!gtaMode){ globe.zoomHold(-1,dt); idleT=0; }
         if(pad){
             float zl=SDL_GameControllerGetAxis(pad,SDL_CONTROLLER_AXIS_TRIGGERLEFT)/32768.f;
             float zr=SDL_GameControllerGetAxis(pad,SDL_CONTROLLER_AXIS_TRIGGERRIGHT)/32768.f;
@@ -3556,23 +4587,34 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
         globe.update(dt);
         panel=lerpf(panel,(screen!=SCR_GLOBE&&!homeMode)?1.f:0.f,1-powf(.00002f,dt));
         float listH=panelH()-124;
-        scrollTarget=0; focusTarget=focusY;
-        if(!selRows.empty()&&selIdx<(int)selRows.size()){
-            Row& r=rows[selRows[selIdx]];
-            scrollTarget=clampf(r.y-listH/2+r.h/2,0.f,std::max(0.f,rowsH-listH));
-            focusTarget=r.y;
-        }
         float k=1-powf(.00002f,dt);
-        scroll=lerpf(scroll,scrollTarget,k);
-        focusY=lerpf(focusY,focusTarget,k);
+        if(scrollManual){
+            scroll+=scrollVel*dt;
+            scrollVel*=powf(.02f,dt);
+            if(fabsf(scrollVel)<4.f)scrollVel=0;
+            scroll=clampf(scroll,0.f,listScrollMax);
+            focusTarget=focusY;
+            if(!selRows.empty()&&selIdx<(int)selRows.size())focusTarget=rows[selRows[selIdx]].y;
+            focusY=lerpf(focusY,focusTarget,k);
+        }else{
+            scrollTarget=0; focusTarget=focusY;
+            if(!selRows.empty()&&selIdx<(int)selRows.size()){
+                Row& r=rows[selRows[selIdx]];
+                scrollTarget=clampf(r.y-listH/2+r.h/2,0.f,std::max(0.f,rowsH-listH));
+                focusTarget=r.y;
+            }
+            scroll=lerpf(scroll,scrollTarget,k);
+            focusY=lerpf(focusY,focusTarget,k);
+        }
         for(auto& to:toasts)to.age+=dt;
         toasts.erase(std::remove_if(toasts.begin(),toasts.end(),[](const Toast& x){return x.age>4.5f;}),toasts.end());
         t+=dt;
         bool wantMedia=now.valid&&(player.state==Player::PLAYING||player.state==Player::BUFFERING);
         if(wantMedia!=mediaOn){ mediaOn=wantMedia; appletSetMediaPlaybackState(mediaOn); }
     }
-    
+
     void enterRadio(){
+        exitGta();
         if(!homeMode)return;
         homeMode=false; home.latch=false;
         globe.home=false; globe.targetR=Globe::DEF_R;
@@ -3581,6 +4623,7 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
         audio.sfx.trigger(Sfx::POP);
     }
     void enterHome(){
+        exitGta();
         if(homeMode)return;
         if(cleanMode)setClean(false);
         homeMode=true; home.latch=false;
@@ -3589,8 +4632,9 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
         audio.sfx.trigger(Sfx::BACK);
     }
     void homeActivate(){
-        if(home.sel==0){ openPassport(); return; }
-        if(home.sel==1){ enterRadio(); return; }
+        if(home.sel==0){openPassport();return;}
+        if(home.sel==1){enterRadio();return;}
+        if(home.sel==2){enterGta();return;}
     }
     void drawAurora(float A){
         if(A<.02f)return;
@@ -3693,6 +4737,7 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
             SDL_Color ac=alpha(mixc(Pal::faint,Pal::accentSoft,k.glow),A2(255));
             if(k.icon==0)HomeIcon::passport(b,ix,iy,is,ic,ac);
             else if(k.icon==1)HomeIcon::radio(b,ix,iy,is,ic,ac);
+            else HomeIcon::gta(b,ix,iy,is,ic,ac);
             b.flush(ren);
             int ly=(int)(cy+h*.5f*sc+30.f);
             txt(F24,k.name,(int)cx,ly,alpha(mixc(Pal::dim,Pal::text,k.glow),A2(255)),true,1);
@@ -3700,7 +4745,7 @@ if(!state.autoNight||cleanMode||homeMode||pcOpen||passportOpen)nightMode=false;
         }
         txt(F15,"A · select        ← → · switch",W/2,432,alpha(Pal::faint,AL(105)),false,1);
     }
-    
+
 void pcFreePhoto(){ if(pcPhoto.tex){SDL_DestroyTexture(pcPhoto.tex);pcPhoto.tex=nullptr;} pcPhoto.w=pcPhoto.h=0; }
 void pcShow(const Place& p){
     Card c; c.id=p.id; c.city=p.title; c.country=p.country; c.cc=isoForCountry(p.country);
@@ -3777,6 +4822,7 @@ void ppRecord(const Channel& c){
     if(!ck.empty()&&pp.countries.size()<240&&
        std::find(pp.countries.begin(),pp.countries.end(),ck)==pp.countries.end())
         pp.countries.push_back(ck);
+    if(!ck.empty()&&ck.rfind("n:",0)!=0)requestFlag(ck);
     ppSave(pp);
 }
 void ppLoadMiiOverride(){
@@ -3794,11 +4840,11 @@ void ppLoadMiiOverride(){
     }
     pgKey.erase(0);
 }
-void openPassport(){ ppEnsure(); ppLoadMiiOverride(); passportOpen=true; ppChimed=false; audio.sfx.trigger(Sfx::PAGE); }
+void openPassport(){ ppEnsure(); ppLoadMiiOverride(); ppPrefetchFlags(); passportOpen=true; ppChimed=false; audio.sfx.trigger(Sfx::PAGE); }
 void closePassport(){ passportOpen=false; ppSave(pp); audio.sfx.trigger(Sfx::BACK); }
 void ppFreePages(){
     for(auto& kv:pgTex)if(kv.second)SDL_DestroyTexture(kv.second);
-    pgTex.clear();pgKey.clear();
+    pgTex.clear();pgKey.clear();pgUse.clear();
     if(coverTex){SDL_DestroyTexture(coverTex);coverTex=nullptr;}
 }
 void ppTurnPage(int d){
@@ -3815,7 +4861,7 @@ void ppUpdate(float dt){
         ppTurn+=dt/.62f;
         if(ppTurn>=1.f){ ppTurn=0; ppTurning=false; ppSpread+=ppDir; ppDir=0; audio.sfx.trigger(Sfx::TICK); }
     }
-    if(!passportOpen&&passportMix<.02f){ ppFreePages(); ppSpread=0; ppTurn=0; ppDir=0; }
+    if(!passportOpen&&passportMix<.02f){ ppSpread=0; ppTurn=0; ppDir=0; ppTurning=false; }
     blinkT-=dt;
     if(blinkT<=0){ blinkP+=dt/.22f; if(blinkP>=1.f){ blinkP=0; blinkT=frand(2.4f,5.4f); } }
 }
@@ -3990,7 +5036,7 @@ void stMotif(Batch& bb,int id,float x,float y,float s,SDL_Color c){
     }
 }
 
-struct StItem{ int kind; std::string t; int fi; float w,h; }; 
+struct StItem{ int kind; std::string t; int fi; float w,h; };
 
 void stTextSize(int fi,const std::string& s,float& w,float& h){
     w=h=0.f;
@@ -4142,7 +5188,7 @@ std::string stCountryLabel(const Stamp& s,int fi,float maxW){
         n=trimStr(n);
         if((float)tw(fi,n,true)<=maxW)return n;
     }
-    if((float)tw(fi,n,true)<=maxW*1.3f)return n;      
+    if((float)tw(fi,n,true)<=maxW*1.3f)return n;
     if(s.iso.size()>=2&&s.iso.rfind("n:",0)!=0)return upperStr(s.iso);
     return n;
 }
@@ -4340,6 +5386,49 @@ SDL_Texture* stBake(const Stamp& s,int size){
     return out;
 }
 
+std::string stKeyOf(const Stamp& s,int size){
+    char kb[112];
+    snprintf(kb,sizeof kb,"%s|%u|%lld|%d",s.iso.c_str(),(unsigned)s.seed,(long long)s.ts,size);
+    return kb;
+}
+bool stReady(const Stamp& s,int size){ return stTexCache.count(stKeyOf(s,size))>0; }
+SDL_Texture* stTex(const Stamp& s,int size){
+    std::string k=stKeyOf(s,size);
+    auto it=stTexCache.find(k);
+    if(it!=stTexCache.end()){ stTexUse[k]=frameNo; return it->second; }
+    if(stBakeBudget<=0)return nullptr;
+    stBakeBudget--;
+    SDL_Texture* tx=stBake(s,size);
+    if(!tx)return nullptr;
+    stTexCache[k]=tx; stTexUse[k]=frameNo;
+    if(stTexCache.size()>40){
+        std::string old; Uint32 best=0xFFFFFFFFu;
+        for(auto& kv:stTexUse){
+            if(kv.second==frameNo||!stTexCache.count(kv.first))continue;
+            if(kv.second<best){best=kv.second;old=kv.first;}
+        }
+        if(!old.empty()){
+            auto d=stTexCache.find(old);
+            if(d!=stTexCache.end()){SDL_DestroyTexture(d->second);stTexCache.erase(d);}
+            stTexUse.erase(old);
+        }
+    }
+    return tx;
+}
+void stFreeTex(){
+    for(auto& kv:stTexCache)if(kv.second)SDL_DestroyTexture(kv.second);
+    stTexCache.clear(); stTexUse.clear();
+}
+void buildVisaKeys(){
+    visaKeyBase.clear(); visaIdx.clear();
+    for(auto& p:stPlace){
+        if(p.idx<0||p.idx>=(int)stamps.v.size())continue;
+        visaIdx[p.page].push_back(p.idx);
+        visaKeyBase[p.page]+="|"+std::to_string(p.idx)+":"+std::to_string(stamps.v[p.idx].seed);
+    }
+    visaKeyDirty=false;
+}
+
 int stPageCount(){
     int mx=1;
     for(auto& p:stPlace)mx=std::max(mx,p.page);
@@ -4380,8 +5469,9 @@ p.rot=((sd%1800)/100.f-9.f)*DEG;
     }
     stLayoutDirty=false;
     for(auto& kv:pgKey)if(kv.first>=2)kv.second.clear();
+    visaKeyDirty=true;
 }
-void stInvalidate(){ stLayoutDirty=true; for(auto& kv:pgKey)kv.second.clear(); }
+void stInvalidate(){ stLayoutDirty=true; visaKeyDirty=true; stMapIsoDirty=true; for(auto& kv:pgKey)kv.second.clear(); }
 void stAward(int type,const std::string& iso,const std::string& country,const std::string& city,
              const std::string& placeId,const std::string& station,int tzMin,int air){
     if(iso.empty())return;
@@ -4430,7 +5520,7 @@ void stAnimUpdate(float dt){
         stAnimT+=dt/.55f;
         if(stAnimT>=1.f){
             stAnimIdx=-1; stAnimT=0;
-            if(stAnimTex){SDL_DestroyTexture(stAnimTex);stAnimTex=nullptr;}
+            stAnimTex=nullptr;
             stAnimTexIdx=-1;
             stInvalidate();
         }
@@ -4446,25 +5536,32 @@ void stDrawVisa(int idx){
     for(auto& p:stPlace){
         if(p.page!=idx||p.idx==stAnimIdx)continue;
         if(p.idx<0||p.idx>=(int)stamps.v.size())continue;
-        SDL_Texture* tx=stBake(stamps.v[p.idx],256);
+        SDL_Texture* tx=stTex(stamps.v[p.idx],192);
         if(!tx)continue;
         int d=(int)(p.r*2.1f);
         SDL_Rect dst{(int)(p.x-d*.5f),(int)(p.y-d*.5f),d,d};
         SDL_SetTextureAlphaMod(tx,232);
         SDL_RenderCopyEx(ren,tx,nullptr,&dst,p.rot*180.f/(float)M_PI,nullptr,SDL_FLIP_NONE);
-        SDL_DestroyTexture(tx);
     }
     txt(F15,"AIRWAVES BORDER CONTROL",212,510,alpha(faint,150),false,1);
 }
 void stMapGlow(){
     if(stMapUntil<=t||homeMode||!globe.places)return;
-    std::set<std::string> have;
-    for(auto& s:stamps.v)have.insert(s.iso);
-    for(size_t i=0;i<globe.pp.size()&&i<globe.places->size();i++){
+    if(stMapIsoDirty){
+        stMapIso.clear();
+        for(auto& stamp:stamps.v)stMapIso.insert(stamp.iso);
+        stMapIsoDirty=false;
+    }
+    if(placeIso.size()!=globe.places->size()){
+        placeIso.resize(globe.places->size());
+        for(size_t i=0;i<placeIso.size();i++){
+            std::string iso=lowerStr(isoForCountry((*globe.places)[i].country));
+            placeIso[i]=iso.empty()?"n:"+lowerStr((*globe.places)[i].country):iso;
+        }
+    }
+    for(size_t i=0;i<globe.pp.size()&&i<placeIso.size();i++){
         if(globe.pz[i]<=.05f)continue;
-        std::string iso=lowerStr(isoForCountry((*globe.places)[i].country));
-        if(iso.empty())iso="n:"+lowerStr((*globe.places)[i].country);
-        if(!have.count(iso))continue;
+        if(!stMapIso.count(placeIso[i]))continue;
         Vec2 p=globe.pp[i];
         b.ring(p.x,p.y,7,1.4f,alpha(Pal::warm,150),12);
     }
@@ -4548,7 +5645,7 @@ if(398.f-(26.f+hw+14.f)>70.f)txt(F15,"RADIO NX · AIRWAYS",398,28,faint,false,2)
             if(ck.rfind("n:",0)==0){
                 b.rrect(fx,fy,44,30,5,alpha(ink,20)); b.flush(ren);
                 txt(F15,upperStr(ck.substr(2,2)),fx+22,fy+7,alpha(ink,200),true,1);
-            } else drawFlag(fx,fy,44,30,ck,"");
+            }
             sh++;
         }
         if(pp.countries.size()>12){ char m[16]; snprintf(m,16,"+%d",(int)pp.countries.size()-12);
@@ -4559,20 +5656,41 @@ if(398.f-(26.f+hw+14.f)>70.f)txt(F15,"RADIO NX · AIRWAYS",398,28,faint,false,2)
     Icon::globe(b,384,482,9,alpha(acc,120)); b.flush(ren);
 }
 
+void drawRecordFlagsLive(float px,float py,float a){
+    if(a<.98f)return;
+    int sh=0;
+    for(size_t i=0;i<pp.countries.size()&&sh<12;i++){
+        const std::string& ck=pp.countries[i];
+        if(ck.rfind("n:",0)!=0)
+            drawFlag(px+26+(sh%6)*58.f, py+358+(sh/6)*44.f, 44,30, ck, "");
+        sh++;
+    }
+}
+
 void ensurePage(int idx){
     if(idx<0||idx>=stPageCount())return;
     if(stLayoutDirty)stRebuildLayout();
     std::string key;
+    int visaReady=0,visaTotal=0;
     if(idx==0)key="id|"+pp.nick+"|"+pp.number+"|"+std::to_string(pp.issued)+"|"+(miiTex?"m":"d")+"|"+std::to_string((int)ppSeed)+"|"+std::to_string(stamps.v.size());
     else if(idx==1)key="rec|"+std::to_string(pp.countries.size())+"|"+std::to_string(pp.cities)+"|"+std::to_string(pp.stations)+"|"+std::to_string(pp.airSec/60)+"|"+std::to_string(stamps.v.size());
-    else {key="visa|"+std::to_string(idx)+"|"+std::to_string(stamps.v.size())+"|"+std::to_string(stAnimIdx);
-        for(auto& p:stPlace)if(p.page==idx)key+="|"+std::to_string(p.idx)+":"+std::to_string(stamps.v[p.idx].seed);}
+    else{
+        if(visaKeyDirty)buildVisaKeys();
+        auto vi=visaIdx.find(idx);
+        if(vi!=visaIdx.end()){visaTotal=(int)vi->second.size();for(int id:vi->second)if(stReady(stamps.v[id],192))visaReady++;}
+        key="visa|"+std::to_string(idx)+"|"+std::to_string(stamps.v.size())+"|"+
+            std::to_string(stAnimIdx)+"|"+std::to_string(visaReady)+"|"+visaKeyBase[idx];
+    }
     auto it=pgTex.find(idx);
-    if(it!=pgTex.end()&&it->second&&pgKey[idx]==key)return;
+    if(it!=pgTex.end()&&it->second&&pgKey[idx]==key&&(idx<2||visaReady>=visaTotal)){pgUse[idx]=frameNo;return;}
     SDL_Texture* tx=it!=pgTex.end()?it->second:nullptr;
-    if(!tx){tx=SDL_CreateTexture(ren,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,424,536);
-        if(!tx)return;SDL_SetTextureBlendMode(tx,SDL_BLENDMODE_BLEND);pgTex[idx]=tx;}
+    if(!tx){
+        tx=SDL_CreateTexture(ren,SDL_PIXELFORMAT_ARGB8888,SDL_TEXTUREACCESS_TARGET,424,536);
+        if(!tx)return;
+        SDL_SetTextureBlendMode(tx,SDL_BLENDMODE_BLEND);pgTex[idx]=tx;
+    }
     b.flush(ren);
+    SDL_RenderSetClipRect(ren,nullptr);
     SDL_SetRenderTarget(ren,tx);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(ren,0,0,0,0);SDL_RenderClear(ren);
@@ -4585,19 +5703,24 @@ void ensurePage(int idx){
     b.flush(ren);
     SDL_SetRenderTarget(ren,nullptr);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
-    pgKey[idx]=key;
-    if(pgTex.size()>6){
-        for(auto i=pgTex.begin();i!=pgTex.end();){
-            if(i->first!=idx&&i->first!=idx-1&&i->first!=idx+1){
-                if(i->second)SDL_DestroyTexture(i->second);
-                pgKey.erase(i->first);i=pgTex.erase(i);
-            }else ++i;
+    pgKey[idx]=key; pgUse[idx]=frameNo;
+    if(pgTex.size()>8){
+        int victim=-1; Uint32 best=0xFFFFFFFFu;
+        for(auto& kv:pgUse){
+            if(kv.second==frameNo||!pgTex.count(kv.first))continue;
+            if(kv.second<best){best=kv.second;victim=kv.first;}
+        }
+        if(victim>=0){
+            auto d=pgTex.find(victim);
+            if(d!=pgTex.end()){if(d->second)SDL_DestroyTexture(d->second);pgTex.erase(d);}
+            pgKey.erase(victim);pgUse.erase(victim);
         }
     }
 }
 
 void drawPassport(){
     if(passportMix<.01f)return;
+    stBakeBudget=ppTurning?0:1;
     if(stLayoutDirty)stRebuildLayout();
     const float pw=424,ph=536;
     float A=easeOut(passportMix);
@@ -4664,7 +5787,7 @@ void drawPassport(){
             else squash(faceL,spine+half,-half,A,sth);
         }else{
             flat(2*s,spine-pw,A);flat(2*s+1,spine,A);
-            if(s==0)drawAvatarLive(spine-pw+26,y0+78,150,A);
+            if(s==0){ drawAvatarLive(spine-pw+26,y0+78,150,A); drawRecordFlagsLive(spine,y0,A); }
             if(stAnimIdx>=0){
                 for(auto& p:stPlace){
                     if(p.idx!=stAnimIdx)continue;
@@ -4672,9 +5795,8 @@ void drawPassport(){
                     if(pg!=2*s&&pg!=2*s+1)continue;
                     float px=(pg==2*s)?spine-pw:spine;
                     if(stAnimTexIdx!=p.idx){
-                        if(stAnimTex)SDL_DestroyTexture(stAnimTex);
-                        stAnimTex=stBake(stamps.v[p.idx],256);
-                        stAnimTexIdx=p.idx;
+                        SDL_Texture* t2=stTex(stamps.v[p.idx],256);
+                        if(t2){stAnimTex=t2;stAnimTexIdx=p.idx;}
                     }
                     SDL_Texture* tx=stAnimTex;
                     if(tx){
@@ -4699,13 +5821,16 @@ void drawPassport(){
         b.flush(ren);
     }else{
         float th=op*(float)M_PI,half=pw*cosf(th),sth=sinf(th);
+        bool had0=pgTex.count(0)>0;
         flat(0,spine-pw,clampf((op-.45f)/.3f,0.f,1.f)*A);
-        float rl=spine+std::max(0.f,half);
-        if(spine+pw-rl>2.f){
-            SDL_Rect clip{(int)rl,(int)y0,(int)(spine+pw-rl),(int)ph};
-            SDL_RenderSetClipRect(ren,&clip);
-            flat(1,spine,A);
-            SDL_RenderSetClipRect(ren,nullptr);
+        if(had0){
+            float rl=spine+std::max(0.f,half);
+            if(spine+pw-rl>2.f){
+                SDL_Rect clip{(int)rl,(int)y0,(int)(spine+pw-rl),(int)ph};
+                SDL_RenderSetClipRect(ren,&clip);
+                flat(1,spine,A);
+                SDL_RenderSetClipRect(ren,nullptr);
+            }
         }
         float ca=A*(1.f-clampf((op-.72f)/.24f,0.f,1.f));
         if(ca>.01f){
@@ -4731,20 +5856,9 @@ void drawPassport(){
     txt(F15,"RADIO NX · TRAVEL DOCUMENT",48,34,alpha(Pal::faint,(int)(200*A)));
     char pg[32];snprintf(pg,32,"PAGE %d / %d",ppSpread+1,ppSpreadCount());
     txt(F15,pg,W-48,34,alpha(Pal::faint,(int)(200*A)),false,2);
-    auto chip2=[&](float x,float y,float w,float h,int id,const char* label,bool on){
-        b.rrect2(x,y,w,h,11,9,alpha(Pal::chip,(int)((on?235:120)*A)));
-        b.line(x+10,y+1,x+w-10,y+1,1,alpha(Pal::wire,(int)(18*A)));b.flush(ren);
-        txt(F17,label,(int)(x+w*.5f),(int)(y+h*.5f-10),alpha(on?Pal::text:Pal::faint,(int)(240*A)),true,1);
-        if(on)hit(id,(int)x,(int)y,(int)w,(int)h);
-    };
-    if(opened&&!ppTurning){
-        chip2(640-260,656,170,42,H_PP_PREV,"‹ PREV",ppSpread>0);
-        chip2(640+90,656,170,42,H_PP_NEXT,"NEXT ›",ppSpread<ppSpreadCount()-1);
-        chip2(640-260-150,656,130,42,H_ST_MAP,"Y · MAP",true);
-    }
-    chip2(640-84,656,168,42,H_PP_BACK,"B · CLOSE",true);
+
 }
-    
+
     void pcTitle(const std::string& s,float x,float y,int fi,int maxW,SDL_Color ink,SDL_Color sh,float phase){
         auto measure=[&](int ff,float tr,const std::string& str){
             float w=0; size_t i=0;
@@ -4769,7 +5883,7 @@ void drawPassport(){
         while(i<s.size()){ size_t st=i; utf8Next(s,i); std::string ch=s.substr(st,i-st);
             txt(fi,ch,(int)cx,(int)y,c,true); cx+=tw(fi,ch,true)+tr; }
     }
-    
+
     void pcArt(const SDL_Rect& r,const PcTheme& th,const Card& c){
         SDL_RenderSetClipRect(ren,&r);
         uint32_t hh=pcHash(c.id);
@@ -4778,11 +5892,11 @@ void drawPassport(){
         SDL_Color sky1=mixc(th.a2,C(255,255,255),.55f);
         SDL_Color sky2=mixc(th.paper,th.a1,.10f);
         b.gradRect(RX,RY,RW,RH,alpha(sky1,255),alpha(sky2,255));
-        
+
         float sx=RX+RW*(.20f+(hh%45)/100.f),sy=RY+RH*.24f;
         b.gradCircle(sx,sy,RH*.20f,alpha(mixc(th.a2,C(255,255,255),.6f),120),alpha(th.a2,0),22);
         b.circle(sx,sy,RH*.055f,alpha(mixc(C(255,252,240),th.a2,.25f),245),18);
-        
+
         for(int i=0;i<3;i++){
             float cx=RX+RW*(.15f+((hh>>(i*3))%70)/100.f),cy=RY+RH*(.14f+.10f*i),s=RH*(.035f+.012f*i);
             SDL_Color cc2=alpha(C(255,255,255),150-i*25);
@@ -4790,7 +5904,7 @@ void drawPassport(){
             b.circle(cx-s*.9f,cy+s*.2f,s*.7f,cc2,12);
             b.quad(cx-s*1.6f,cy,cx+s*1.6f,cy,cx+s*1.6f,cy+s*.7f,cx-s*1.6f,cy+s*.7f,cc2);
         }
-        if(scene==0){                                   
+        if(scene==0){
             float base=RY+RH*.66f;
             for(int k=0;k<3;k++){
                 SDL_Color col=alpha(mixc(th.a1,C(255,255,255),.35f-.16f*k),255);
@@ -4812,7 +5926,7 @@ void drawPassport(){
                 float xx=RX+RW*.5f-ww*.5f+RW*.12f*sinf(i*1.3f);
                 b.line(xx,yy,xx+ww,yy,2.f,alpha(C(255,255,255),110-i*10));
             }
-        } else if(scene==1){                            
+        } else if(scene==1){
             float base=RY+RH*.74f,bw=RW/13.f;
             for(int i=0;i<13;i++){
                 uint32_t v=pcHash(c.id+std::to_string(i*7));
@@ -4831,7 +5945,7 @@ void drawPassport(){
                 float yy=base+RH*.04f*(i+1);
                 b.line(RX+RW*.08f,yy,RX+RW*.92f,yy,1.6f,alpha(C(255,255,255),70-i*8));
             }
-        } else {                                        
+        } else {
             for(int k=0;k<3;k++){
                 float base=RY+RH*(.58f+.13f*k),amp=RH*(.09f-.02f*k);
                 SDL_Color col=alpha(mixc(th.a1,C(255,255,255),.30f-.14f*k),255);
@@ -5242,6 +6356,8 @@ void drawPanel(){
     SDL_Rect clip{(int)lx,(int)listTop,(int)lw,(int)listH};
     SDL_RenderSetClipRect(ren,&clip);
     clipOn=true; clipR=clip;
+    panelListRect=clip; panelListOn=true;
+    listScrollMax=std::max(0.f,rowsH-listH);
     bool loading=(screen==SCR_CITY&&cityLoading)||(screen==SCR_SEARCH&&searchLoading);
     if(loading){
         Icon::spinner(b,px+PW/2,listTop+60,16,t*4,Pal::accent); b.flush(ren);
@@ -5340,6 +6456,7 @@ void drawPanel(){
         float x,y;
         if(panel>.5f){ x=panelX()+PW-w; y=84+panelH()+12; }
         else { x=W-24-w; y=190; }
+        nowCardRect={(int)x,(int)y,(int)w,(int)h}; nowCardOn=true;
         int st=player.state;
         bool live=st==Player::PLAYING;
         SDL_Color tint=skyTint(cachedHour);
@@ -5354,8 +6471,16 @@ void drawPanel(){
         int bw2=tw(F17,badge,true)+24;
         b.rrect(x+w-18-bw2,y+14,(float)bw2,26,13,alpha(bc,38)); b.flush(ren);
         txt(F17,badge,(int)(x+w-18-bw2/2),(int)y+17,bc,true,1);
-        drawFlag(x+20,y+50,56,56,now.cc,now.country);
-        txt(F30,trunc(F30,now.title,(int)w-116,true),(int)x+92,(int)y+46,Pal::text,true);
+        if(nowGta){
+            std::string logo=gtaLogoRel(gtaNowMount);
+            if(!gtaAssetPath(logo).empty())gtaLogo(logo,SDL_Rect{(int)x+20,(int)y+50,56,56},128,255,255);
+            else{
+                std::string game=gtaNowMount.substr(0,gtaNowMount.find('/'));SDL_Color ac=hsv(gtaHue(game),.6f,.95f);
+                b.rrect(x+20,y+50,56,56,12,alpha(ac,26));b.flush(ren);
+                GtaIcon::wheel(b,x+48,y+78,20,alpha(Pal::text,220),ac);b.flush(ren);
+            }
+        } else drawFlag(x+20,y+50,56,56,now.cc,now.country);
+        marquee(F30,now.title,(int)x+92,(int)y+46,(int)w-116,Pal::text,true,30.f);
         std::string sub=now.place.empty()?now.country:now.place+" · "+now.country;
         txt(F17,trunc(F17,sub,(int)w-116),(int)x+92,(int)y+86,Pal::dim);
         hit(H_PLACE,(int)x+92,(int)y+82,(int)w-116,26);
@@ -5390,27 +6515,25 @@ void drawPanel(){
             b.flush(ren);
         }
 float cy=y+250;
-b.circle(x+44,cy,22,live?Pal::live:alpha(Pal::wire,18),18); b.flush(ren);
-if(live||st==Player::BUFFERING)Icon::pause(b,x+44,cy,10.5f,C(0,0,0));
-else Icon::play(b,x+44,cy,10.5f,st==Player::FAILED?Pal::danger:Pal::text);
-b.flush(ren); hit(H_PLAYPAUSE,(int)x+22,(int)cy-22,44,44);
-b.ring(x+96,cy,18,1.3f,alpha(Pal::wire,26),16); b.flush(ren);
-Icon::heart(b,x+96,cy,10,isFav(now.chId)?Pal::warm:Pal::dim,isFav(now.chId)); b.flush(ren);
-hit(H_FAVNOW,(int)x+76,(int)cy-20,40,40);
-PcIcon::card(b,x+142,cy,10,Pal::warm); b.flush(ren);
-hit(H_PC_NOW,(int)x+122,(int)cy-20,40,40);
-Icon::list(b,x+188,cy,10,Pal::dim); b.flush(ren);
-hit(H_HIST,(int)x+168,(int)cy-20,40,40);
-Icon::moon(b,x+234,cy,10,sleepMin>0?Pal::warm:Pal::dim); b.flush(ren);
-hit(H_SLEEP,(int)x+214,(int)cy-20,40,40);
-std::string status;
-if(st==Player::BUFFERING)status="Connecting…";
-else if(st==Player::FAILED)status=player.error();
-else if(st==Player::PAUSED)status="Paused";
-else status=player.trackTitle();
-if(status.empty())status=now.place.empty()?now.country:now.place;
-if(sleepMin>0&&sleepLeft>0){ char sb[24]; snprintf(sb,24,"%dm · ",(int)ceilf(sleepLeft/60.f)); status=sb+status; }
-txt(F17,trunc(F17,status,(int)w-292),(int)x+262,(int)cy-10,st==Player::FAILED?Pal::danger:Pal::faint);
+        bool fv=isFav(now.chId);
+        b.circle(x+44,cy,22,live?Pal::live:alpha(Pal::wire,18),18);
+        b.ring(x+96,cy,18,1.3f,alpha(Pal::wire,26),16);
+        Icon::heart(b,x+96,cy,10,fv?Pal::warm:Pal::dim,fv);
+        if(live||st==Player::BUFFERING)Icon::pause(b,x+44,cy,10.5f,C(0,0,0));
+        else Icon::play(b,x+44,cy,10.5f,st==Player::FAILED?Pal::danger:Pal::text);
+        b.flush(ren);
+        hit(H_PLAYPAUSE,(int)x+22,(int)cy-22,44,44);
+        hit(H_FAVNOW,(int)x+76,(int)cy-20,40,40);
+
+        std::string status;
+        if(st==Player::BUFFERING)status="Connecting…";
+        else if(st==Player::FAILED)status=player.error();
+        else if(st==Player::PAUSED)status="Paused";
+        else status=player.trackTitle();
+        if(status.empty())status=now.place.empty()?now.country:now.place;
+        if(sleepMin>0&&sleepLeft>0){ char sb[24]; snprintf(sb,24,"%dm · ",(int)ceilf(sleepLeft/60.f)); status=sb+status; }
+        marquee(F17,status,(int)x+126,(int)cy-10,(int)w-146,
+                st==Player::FAILED?Pal::danger:Pal::faint,false,46.f);
 }
     void drawTopBar(){
         b.gradRect(0,0,W,72,alpha(C(0,0,0),170),alpha(C(0,0,0),0)); b.flush(ren);
@@ -5489,7 +6612,10 @@ txt(F17,trunc(F17,status,(int)w-292),(int)x+262,(int)cy-10,st==Player::FAILED?Pa
         bool live=st==Player::PLAYING;
         const int LX=56, LW=286, RX=W-56;
         if(now.valid){
-            if(A>.35f)drawFlag((float)LX,292.f,60.f,40.f,now.cc,now.country);
+            if(A>.35f){
+                if(nowGta){SDL_Color ac=hsv(38.f,.6f,.95f);GtaIcon::wheel(b,(float)LX+30,312.f,20,alpha(Pal::text,AL(210)),alpha(ac,AL(230)));b.flush(ren);}
+                else drawFlag((float)LX,292.f,60.f,40.f,now.cc,now.country);
+            }
             std::string nm=trunc(F24,now.title,LW,true);
             txt(F24,nm,LX,344,alpha(Pal::text,AL(255)),true);
             int uw=std::min(tw(F24,nm,true),LW);
@@ -5530,20 +6656,12 @@ txt(F17,trunc(F17,status,(int)w-292),(int)x+262,(int)cy-10,st==Player::FAILED?Pa
             char vb[16]; snprintf(vb,16,"VOL %d",(int)lroundf(player.volume.load()*100));
             txt(F17,vb,W/2,640,alpha(Pal::text,(int)(235*va)),true,1);
         }
-        const float ew=560.f,ex=(W-ew)/2.f,base=702.f,eh=30.f,bw=ew/NB;
-        b.line(ex,base+2.f,ex+ew,base+2.f,1.f,alpha(Pal::wire,AL(26)));
-        for(int i=0;i<NB;i++){
-            float v=eq[i];
-            float br=live?(.5f+.5f*sinf(t*1.1f+i*.35f))*2.2f:0.f;
-            float bh=2.5f+br+v*eh;
-            SDL_Color col=alpha(live?(v>.78f?Pal::accentSoft:Pal::accent):Pal::faint,AL(live?225:110));
-            float bx=ex+i*bw+1.6f,by=base-bh,wi=bw-3.2f;
-            b.quad(bx,by,bx+wi,by,bx+wi,by+bh,bx,by+bh,col);
-        }
-        b.flush(ren);
+
     }
     void draw(){
-        frameNo++; uiHits.clear(); clipOn=false;
+        frameNo++;uiHits.clear();clipOn=false;
+        SDL_RenderSetClipRect(ren,nullptr);
+        panelListOn=false;nowCardOn=false;
         if(bgTex)SDL_RenderCopy(ren,bgTex,nullptr,nullptr);
         else { SDL_SetRenderDrawColor(ren,0,0,0,255); SDL_RenderClear(ren); }
         float hA=homeMix;
@@ -5551,10 +6669,10 @@ txt(F17,trunc(F17,status,(int)w-292),(int)x+262,(int)cy-10,st==Player::FAILED?Pa
         float nb=homeMode?1.f:(now.valid?((cachedHour<6.f||cachedHour>19.f)?1.f:0.f):0.f);
         float warm=(!homeMode&&now.valid)?(1.f-nb)*.6f:0.f;
         sky.draw(b,t,sinf(globe.yaw)*.5f,(cleanMode&&!homeMode)?1.f:nb); b.flush(ren);
-if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
-        stMapGlow();
+if(pcMix<.999f&&passportMix<.999f&&gtaMix<.999f)globe.draw(ren,b,t,W,H,warm);
+        if(gtaMix<.5f)stMapGlow();
         if(hA>.01f){ drawAurora(hA); drawHome(hA); }
-        if(hA<.55f){
+        if(hA<.999f&&gtaMix<.01f&&!gtaMode&&!homeMode){
             if(cleanMode){
                 drawClean();
                 drawToasts();
@@ -5572,7 +6690,6 @@ if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
                         txt(F15,pl.country,(int)globe.center.x,(int)y+32,Pal::dim,false,1);
                         txt(F15,cnt,(int)globe.center.x,(int)y+52,Pal::liveSoft,false,1);
                     }
-                    if(globe.locked){ Icon::lock(b,60,90,10,Pal::warm,true); b.flush(ren); txt(F15,"LOCKED",78,82,Pal::warm); }
                     drawTopBar(); drawPanel(); drawNowCard(); drawToasts();
                     drawLoading();
                 }
@@ -5580,7 +6697,7 @@ if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
             }
         }
         if(hA>.02f){
-            if(hA>=.55f)drawToasts(112.f);   
+            if(hA>=.55f)drawToasts(112.f);
             if(!placesReady)
                 txt(F15,placesError?"map unavailable":"loading map…",24,76,alpha(Pal::faint,(int)(190*hA)));
             if(now.valid){
@@ -5589,12 +6706,20 @@ if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
                 txt(F17,trunc(F17,now.title,360),44,H-40,alpha(Pal::dim,(int)(230*hA)));
             }
         }
+        if(gtaMix>.01f){uiHits.clear();drawGta();}
+        if(passportMix>.5f)uiHits.clear();
         drawPassport();
+        if(pcMix>.5f)uiHits.clear();
         drawPostcard();
         SDL_RenderPresent(ren);
     }
   void onButton(int btn){
+    bool wasScreenOff=screenOff;
     wake();
+    if(btn==SDL_CONTROLLER_BUTTON_RIGHTSTICK){
+        if(!wasScreenOff)setScreenOff(true);
+        return;
+    }
     if(pcOpen){
         if(btn==BTN_BACK||btn==BTN_SELECT||btn==SDL_CONTROLLER_BUTTON_BACK||btn==SDL_CONTROLLER_BUTTON_START)pcClose();
         else if(btn==BTN_RANDOM)pcRetry();
@@ -5605,6 +6730,39 @@ if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
         else if(btn==SDL_CONTROLLER_BUTTON_DPAD_LEFT)ppTurnPage(-1);
         else if(btn==SDL_CONTROLLER_BUTTON_DPAD_RIGHT)ppTurnPage(1);
         else if(btn==BTN_RANDOM){stMapUntil=t+8.f;closePassport();}
+        return;
+    }
+    if(gtaMode){
+        if(btn==BTN_BACK){if(gtaView==1)gtaBackToShelf();else{exitGta();enterHome();}return;}
+        if(gtaView==0){
+            switch(btn){
+                case SDL_CONTROLLER_BUTTON_DPAD_LEFT:gtaMoveCard(-1,0);break;
+                case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:gtaMoveCard(1,0);break;
+                case SDL_CONTROLLER_BUTTON_DPAD_UP:gtaMoveCard(0,-1);break;
+                case SDL_CONTROLLER_BUTTON_DPAD_DOWN:gtaMoveCard(0,1);break;
+                case SDL_CONTROLLER_BUTTON_B:gtaEnterGame(gtaPick);break;
+                case SDL_CONTROLLER_BUTTON_LEFTSTICK:player.togglePause();break;
+            }
+            return;
+        }
+        if(btn==BTN_SELECT){
+            if(!gtaRows.empty()&&gtaSel>=0&&gtaSel<(int)gtaRows.size()){
+                const GtaStation& station=gta[gtaRows[gtaSel]];
+                if(nowGta&&gtaNowMount==station.mount)player.togglePause();else gtaPlay(gtaSel);
+            }
+            return;
+        }
+        if(btn==BTN_FAV){gtaFav();return;}
+        if(btn==BTN_RANDOM){gtaRandom();return;}
+        switch(btn){
+            case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+            case SDL_CONTROLLER_BUTTON_DPAD_UP:gtaMove(-1);break;
+            case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+            case SDL_CONTROLLER_BUTTON_DPAD_DOWN:gtaMove(1);break;
+            case SDL_CONTROLLER_BUTTON_LEFTSHOULDER:gtaNextGame(-1);break;
+            case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER:gtaNextGame(1);break;
+            case SDL_CONTROLLER_BUTTON_LEFTSTICK:player.togglePause();break;
+        }
         return;
     }
     if(btn==SDL_CONTROLLER_BUTTON_BACK||btn==SDL_CONTROLLER_BUTTON_START){
@@ -5627,7 +6785,6 @@ if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
     if(btn==BTN_RANDOM){ randomWave(); return; }
     switch(btn){
         case SDL_CONTROLLER_BUTTON_LEFTSTICK: player.togglePause(); break;
-        case SDL_CONTROLLER_BUTTON_RIGHTSTICK: toggleLock(); break;
         case SDL_CONTROLLER_BUTTON_DPAD_UP:
             if(screen==SCR_GLOBE||cleanMode){ globe.flying=false; globe.idle=0; globe.pitch=clampf(globe.pitch+.12f*globe.inputK(),-1.35f,1.35f); }
             else moveSel(-1);
@@ -5680,8 +6837,8 @@ if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
                     minusDown=plusDown=comboFired=false; bl=br=false;
                     break;
                 case SDL_CONTROLLERBUTTONDOWN:
-                    if(e.cbutton.button==SDL_CONTROLLER_BUTTON_LEFTSHOULDER){bl=true;wake();}
-                    else if(e.cbutton.button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER){br=true;wake();}
+                    if(e.cbutton.button==SDL_CONTROLLER_BUTTON_LEFTSHOULDER&&!gtaMode){bl=true;wake();}
+                    else if(e.cbutton.button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER&&!gtaMode){br=true;wake();}
                     else onButton(e.cbutton.button);
                     break;
                 case SDL_CONTROLLERBUTTONUP:
@@ -5689,19 +6846,39 @@ if(pcMix<.985f&&passportMix<.985f)globe.draw(ren,b,t,W,H,warm);
                     else if(e.cbutton.button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)br=false;
                     else onButtonUp(e.cbutton.button);
                     break;
-                case SDL_FINGERDOWN:
-                    wake(); touch[e.tfinger.fingerId]={e.tfinger.x*W,e.tfinger.y*H}; fingers=(int)touch.size(); break;
-                case SDL_FINGERUP:
-                    touch.erase(e.tfinger.fingerId); fingers=(int)touch.size(); if(fingers<2)pinchDist=0; break;
-                case SDL_FINGERMOTION:
-                    touch[e.tfinger.fingerId]={e.tfinger.x*W,e.tfinger.y*H}; fingers=(int)touch.size(); idleT=0;
-                    if(fingers==2&&!cleanMode){
-                        auto it=touch.begin(); Vec2 a=it->second,bb=(++it)->second;
-                        float d=sqrtf((a.x-bb.x)*(a.x-bb.x)+(a.y-bb.y)*(a.y-bb.y));
-                        if(pinchDist>0)globe.zoom((d-pinchDist)*.8f);
-                        pinchDist=d;
+                case SDL_FINGERDOWN:{
+                    wake();
+                    Vec2 p{e.tfinger.x*W,e.tfinger.y*H};
+                    touch[e.tfinger.fingerId]=p; fingers=(int)touch.size();
+                    if(fingers==1)touchBegin(p.x,p.y,e.tfinger.fingerId);
+                    else { tActive=false; pinchDist=0; scrollVel=0; }
+                    break;}
+                case SDL_FINGERUP:{
+                    Vec2 p{e.tfinger.x*W,e.tfinger.y*H};
+                    bool wasPrimary=(e.tfinger.fingerId==tPrimary);
+                    touch.erase(e.tfinger.fingerId); fingers=(int)touch.size();
+                    if(fingers<2)pinchDist=0;
+                    if(wasPrimary&&tActive)touchEnd(p.x,p.y);
+                    tActive=false;
+                    if(fingers==1){
+                        auto it=touch.begin();
+                        tPrimary=it->first; tStart=tPrev=tCur=it->second;
+                        tTravel=999.f; tActive=true; tDownT=SDL_GetTicks();
+                        tZone=touchZone(it->second.x,it->second.y);
                     }
-                    break;
+                    break;}
+                case SDL_FINGERMOTION:{
+                    Vec2 p{e.tfinger.x*W,e.tfinger.y*H};
+                    touch[e.tfinger.fingerId]=p; fingers=(int)touch.size(); idleT=0;
+                    if(fingers==2&&!passportOpen&&!pcOpen&&!homeMode&&!gtaMode){
+                        auto it=touch.begin(); Vec2 a=it->second,b2=(++it)->second;
+                        float d=sqrtf((a.x-b2.x)*(a.x-b2.x)+(a.y-b2.y)*(a.y-b2.y));
+                        if(pinchDist>0)globe.zoom((d-pinchDist)*.9f);
+                        pinchDist=d; tActive=false;
+                    } else if(fingers==1&&e.tfinger.fingerId==tPrimary){
+                        touchMove(p.x,p.y);
+                    }
+                    break;}
             }
         }
     }
@@ -5714,7 +6891,7 @@ void run(){
         AppletFocusState fst=appletGetFocusState();
         focused=(fst==AppletFocusState_InFocus);
         update(dt);
-        if(focused)draw();
+        if(focused&&!screenOff)draw();
         Uint32 el=SDL_GetTicks()-fs;
         if(!focused){ if(el<100u)SDL_Delay(100u-el); }
         else if(el<16u)SDL_Delay(16u-el);
@@ -5723,7 +6900,7 @@ void run(){
     void shutdown(){
 stLeave();
 stSave(stamps);
-if(stAnimTex){SDL_DestroyTexture(stAnimTex);stAnimTex=nullptr;}
+stAnimTex=nullptr; stFreeTex();
 for(auto& kv:stOvr)if(kv.second)SDL_DestroyTexture(kv.second);
 stOvr.clear();
 ppSave(pp);
@@ -5735,7 +6912,13 @@ if(miiTex){SDL_DestroyTexture(miiTex);miiTex=nullptr;}
         flushState(); flushDead();
         worker.stop();
         pcWorker.stop();
+        gtaWorker.stop();
+        gtaImgWorker.stop();
+        gtaFreeTx2();
+        flagWorker[0].stop(); flagWorker[1].stop();
         player.stop();
+        if(screenOff&&lblInit)lblSetCurrentBrightnessSetting(savedBrightness);
+        if(lblInit)lblExit();
         audio.close();
         clearLabs();
         globe.destroyCache();
