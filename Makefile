@@ -11,18 +11,18 @@ include $(DEVKITPRO)/libnx/switch_rules
 TARGET   := RadioNX
 BUILD    := build
 SOURCES  := src
-ROMFS    := assets
+ROMFS    := romfs
+ASSETS   := assets
 INCLUDES :=
 
 APP_TITLE   := RadioNX
 APP_AUTHOR  := Muveeer
-APP_VERSION := 2.0.0
-ICON        := icon.jpg
+APP_VERSION := 2.1.0
 
-export APP_TITLE   := RadioNX
-export APP_AUTHOR  := Muveeer
-export APP_VERSION := 2.0.0
-export APP_ICON    := $(TOPDIR)/icon.jpg
+export APP_TITLE APP_AUTHOR APP_VERSION
+
+# 1 = класть font_cjk.ttf в NRO (иероглифы на штампах), 0 = минус ~9 МБ
+EMBED_CJK ?= 1
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
@@ -32,9 +32,13 @@ CFLAGS += $(INCLUDE) -D__SWITCH__ -I$(DEVKITPRO)/portlibs/switch/include/SDL2
 
 CXXFLAGS := $(CFLAGS) -std=gnu++17 -fexceptions -frtti
 ASFLAGS  := -g $(ARCH)
-LDFLAGS  = -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+LDFLAGS  = -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) \
+           -Wl,--gc-sections -Wl,-Map,$(notdir $*.map)
 
 LIBDIRS := $(DEVKITPRO)/portlibs/switch $(DEVKITPRO)/libnx
+
+ROMFS_ABS := $(CURDIR)/$(ROMFS)
+GTA_SRC   := $(CURDIR)/$(ASSETS)/gta
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 
@@ -50,21 +54,20 @@ export LD := $(CXX)
 
 export OFILES   := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o)
 export INCLUDE  := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
+                   $(foreach dir,$(SOURCES),-I$(CURDIR)/$(dir)) \
                    $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
                    -I$(CURDIR)/$(BUILD)
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
-icons := $(wildcard *.jpg)
-ifneq (,$(findstring $(TARGET).jpg,$(icons)))
-	export APP_ICON := $(TOPDIR)/$(TARGET).jpg
-else
-	ifneq (,$(findstring icon.jpg,$(icons)))
-		export APP_ICON := $(TOPDIR)/icon.jpg
-	endif
+ICON_FILE := $(firstword $(wildcard $(CURDIR)/$(TARGET).jpg $(CURDIR)/icon.jpg $(CURDIR)/$(ASSETS)/icon.jpg))
+
+ifneq ($(ICON_FILE),)
+export APP_ICON := $(ICON_FILE)
+export NROFLAGS += --icon=$(ICON_FILE)
 endif
 
 ifneq ($(ROMFS),)
-	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
+export NROFLAGS += --romfsdir=$(ROMFS_ABS)
 endif
 
 .PHONY: all clean $(BUILD) assets
@@ -75,19 +78,34 @@ $(BUILD): assets
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
+# БЕЛЫЙ СПИСОК: только то, что реально читает main.cpp
 assets:
-	@echo syncing GTA assets ...
-	@mkdir -p $(CURDIR)/$(ROMFS)/gta
-	@cp -r $(CURDIR)/RadioNX_assets/gta/catalog.json $(CURDIR)/$(ROMFS)/gta/
-	@cp -r $(CURDIR)/RadioNX_assets/gta/covers   $(CURDIR)/$(ROMFS)/gta/
-	@cp -r $(CURDIR)/RadioNX_assets/gta/stations $(CURDIR)/$(ROMFS)/gta/
-	@cp -r $(CURDIR)/RadioNX_assets/gta/games    $(CURDIR)/$(ROMFS)/gta/
-	@cp -r $(CURDIR)/RadioNX_assets/gta/fonts    $(CURDIR)/$(ROMFS)/gta/
-	@cp -r $(CURDIR)/RadioNX_assets/gta/sfx      $(CURDIR)/$(ROMFS)/gta/
+	@echo "romfs: packing (whitelist) ..."
+	@test -f "$(CURDIR)/$(ASSETS)/font.ttf" || { echo "ERROR: assets/font.ttf not found"; exit 1; }
+	@test -f "$(GTA_SRC)/catalog.json" || { echo "ERROR: assets/gta/catalog.json not found"; exit 1; }
+	@rm -rf "$(ROMFS_ABS)"
+	@mkdir -p "$(ROMFS_ABS)/assets" "$(ROMFS_ABS)/gta/sfx"
+	@cp -f "$(CURDIR)/$(ASSETS)/font.ttf" "$(ROMFS_ABS)/assets/"
+ifeq ($(EMBED_CJK),1)
+	@if [ -f "$(CURDIR)/$(ASSETS)/font_cjk.ttf" ]; then cp -f "$(CURDIR)/$(ASSETS)/font_cjk.ttf" "$(ROMFS_ABS)/assets/"; fi
+endif
+	@if [ -f "$(CURDIR)/$(ASSETS)/cacert.pem" ]; then cp -f "$(CURDIR)/$(ASSETS)/cacert.pem" "$(ROMFS_ABS)/assets/"; fi
+	@cp -f  "$(GTA_SRC)/catalog.json" "$(ROMFS_ABS)/gta/"
+	@cp -rf "$(GTA_SRC)/stations"     "$(ROMFS_ABS)/gta/"
+	@cp -rf "$(GTA_SRC)/games"        "$(ROMFS_ABS)/gta/"
+	@for f in change-station-sa.mp3 change-station-vc.mp3; do \
+		if [ -f "$(GTA_SRC)/sfx/$$f" ]; then cp -f "$(GTA_SRC)/sfx/$$f" "$(ROMFS_ABS)/gta/sfx/"; fi; \
+	done
+	@find "$(ROMFS_ABS)" -type d -name '_backup*' -prune -exec rm -rf {} + 2>/dev/null || true
+	@find "$(ROMFS_ABS)" -type d -name '.git' -prune -exec rm -rf {} + 2>/dev/null || true
+	@find "$(ROMFS_ABS)" -type f \( -name 'Thumbs.db' -o -name 'desktop.ini' -o -name '.DS_Store' \) -delete 2>/dev/null || true
+	@echo "romfs breakdown:"
+	@du -sh "$(ROMFS_ABS)/assets" "$(ROMFS_ABS)/gta" 2>/dev/null || true
+	@du -sh "$(ROMFS_ABS)" 2>/dev/null || true
 
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).nro $(TARGET).nacp $(TARGET).elf
+	@rm -fr $(BUILD) $(ROMFS) $(TARGET).nro $(TARGET).nacp $(TARGET).elf $(TARGET).map
 
 else
 
@@ -97,13 +115,13 @@ all: $(OUTPUT).nro
 
 $(OUTPUT).nacp:
 	@echo creating ... $(notdir $@)
-	nacptool --create "RadioNX" "Muveeer" "1.0.0" $@
+	@nacptool --create "$(APP_TITLE)" "$(APP_AUTHOR)" "$(APP_VERSION)" $@
 
 ROMFS_FILES := $(shell find $(TOPDIR)/$(ROMFS) -type f 2>/dev/null)
 
 $(OUTPUT).nro: $(OUTPUT).elf $(OUTPUT).nacp $(ROMFS_FILES)
 	@echo built ... $(notdir $@)
-	elf2nro $< $@ --icon=$(TOPDIR)/icon.jpg --nacp=$(OUTPUT).nacp $(NROFLAGS)
+	@elf2nro $< $@ --nacp=$(OUTPUT).nacp $(NROFLAGS)
 
 $(OUTPUT).elf: $(OFILES)
 
