@@ -15,11 +15,27 @@ Every station is a new destination.
 
 ---
 
+## GTA Radio
+
+RadioNX includes a dedicated GTA Radio experience featuring radio stations from the Grand Theft Auto series.
+
+![GTA Radio](docs/gtaradio.jpg)
+
+### GTA IV Radio
+
+![GTA IV Radio](docs/gta4radio.jpg)
+
+### GTA V Radio
+
+![GTA V Radio](docs/gta5radio.jpg)
+
+---
+
 ## Features
 
 - **Interactive 3D Globe** — Explore the world, rotate the globe and discover radio stations by location.
 - **Worldwide Radio** — Listen to radio stations from cities and countries around the globe.
-- **GTA Radio** — Listen to radio stations from Grand Theft Auto games using streams from GTARadio.net.
+- **GTA Radio** — Listen to radio stations from Grand Theft Auto games, including the separate GTA V integration.
 - **Station Search** — Find radio stations and cities using the built-in search.
 - **Random Discovery** — Let RadioNX take you somewhere unexpected with a random station.
 - **World Passport** — Your personal listening passport with travel records, statistics and collectible country stamps.
@@ -61,12 +77,6 @@ Choose a city, browse its available radio stations and tune in to local broadcas
 
 ![Radio Station Selection](docs/radio-stations.jpg)
 
-### GTA Radio
-
-Explore and listen to radio stations from the Grand Theft Auto series.
-
-![GTA Radio](docs/gtaradio.jpg)
-
 ### City Postcards
 
 Discover places around the world through visual city postcards.
@@ -93,7 +103,8 @@ Suggestions, feedback and bug reports are welcome through [GitHub Issues](https:
 
 ## Credits & Third-Party Sources
 
-- **[GTARadio.net](https://gtaradio.net)** — Source used for GTA Radio streams in RadioNX.
+- **[GTARadio.net](https://gtaradio.net)** — Source for GTA IV, GTA San Andreas, GTA Vice City, GTA Vice City Stories and other GTA radio streams used in RadioNX, excluding GTA V.
+- **GTA V Radio** — The RadioNX GTA V radio integration is original work by **Muveeer** and is not sourced from GTARadio.net.
 
 RadioNX is an independent project and is not affiliated with or endorsed by GTARadio.net, Rockstar Games or Take-Two Interactive.
 
