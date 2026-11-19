@@ -15,22 +15,6 @@ Every station is a new destination.
 
 ---
 
-## GTA Radio
-
-RadioNX includes a dedicated GTA Radio experience featuring radio stations from the Grand Theft Auto series.
-
-![GTA Radio](docs/gtaradio.jpg)
-
-### GTA IV Radio
-
-![GTA IV Radio](docs/gta4radio.jpg)
-
-### GTA V Radio
-
-![GTA V Radio](docs/gta5radio.jpg)
-
----
-
 ## Features
 
 - **Interactive 3D Globe** — Explore the world, rotate the globe and discover radio stations by location.
@@ -56,6 +40,20 @@ RadioNX includes a dedicated GTA Radio experience featuring radio stations from 
 Your starting point. Choose between your World Passport and the radio experience.
 
 ![RadioNX Main Menu](docs/home.jpg)
+
+## GTA Radio
+
+RadioNX includes a dedicated GTA Radio experience featuring radio stations from the Grand Theft Auto series.
+
+![GTA Radio](docs/gtaradio.jpg)
+
+### GTA IV Radio
+
+![GTA IV Radio](docs/gta4radio.jpg)
+
+### GTA V Radio
+
+![GTA V Radio](docs/gta5radio.jpg)
 
 ### World Passport
 
