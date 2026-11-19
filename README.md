@@ -19,7 +19,7 @@ Every station is a new destination.
 
 - **Interactive 3D Globe** — Explore the world, rotate the globe and discover radio stations by location.
 - **Worldwide Radio** — Listen to radio stations from cities and countries around the globe.
-- **GTA Radio** — Listen to radio stations from Grand Theft Auto games, including the separate GTA V integration.
+- **GTA Radio** — Listen to radio stations from Grand Theft Auto games.
 - **Station Search** — Find radio stations and cities using the built-in search.
 - **Random Discovery** — Let RadioNX take you somewhere unexpected with a random station.
 - **World Passport** — Your personal listening passport with travel records, statistics and collectible country stamps.
