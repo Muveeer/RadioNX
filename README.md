@@ -47,11 +47,7 @@ RadioNX includes a dedicated GTA Radio experience featuring radio stations from 
 
 ![GTA Radio](docs/gtaradio.jpg)
 
-### GTA IV Radio
-
-![GTA IV Radio](docs/gta4radio.jpg)
-
-### GTA V Radio
+### GTA VI Radio
 
 ![GTA V Radio](docs/gta5radio.jpg)
 
