@@ -17,7 +17,7 @@ INCLUDES :=
 
 APP_TITLE   := RadioNX
 APP_AUTHOR  := Muveeer
-APP_VERSION := 2.1.0
+APP_VERSION := 2.2.0
 
 export APP_TITLE APP_AUTHOR APP_VERSION
 
@@ -78,21 +78,21 @@ $(BUILD): assets
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
-# БЕЛЫЙ СПИСОК: только то, что реально читает main.cpp
+# БЕЗ СТИРАНИЯ: romfs — рабочая папка, assets только доливает сверху.
+# Иконки можно держать прямо в romfs/gta/stations — make их не удалит.
 assets:
-	@echo "romfs: packing (whitelist) ..."
+	@echo "romfs: sync (no wipe) ..."
 	@test -f "$(CURDIR)/$(ASSETS)/font.ttf" || { echo "ERROR: assets/font.ttf not found"; exit 1; }
-	@test -f "$(GTA_SRC)/catalog.json" || { echo "ERROR: assets/gta/catalog.json not found"; exit 1; }
-	@rm -rf "$(ROMFS_ABS)"
-	@mkdir -p "$(ROMFS_ABS)/assets" "$(ROMFS_ABS)/gta/sfx"
+	@mkdir -p "$(ROMFS_ABS)/assets" "$(ROMFS_ABS)/gta/sfx" "$(ROMFS_ABS)/gta/stations" "$(ROMFS_ABS)/gta/games"
 	@cp -f "$(CURDIR)/$(ASSETS)/font.ttf" "$(ROMFS_ABS)/assets/"
 ifeq ($(EMBED_CJK),1)
 	@if [ -f "$(CURDIR)/$(ASSETS)/font_cjk.ttf" ]; then cp -f "$(CURDIR)/$(ASSETS)/font_cjk.ttf" "$(ROMFS_ABS)/assets/"; fi
 endif
 	@if [ -f "$(CURDIR)/$(ASSETS)/cacert.pem" ]; then cp -f "$(CURDIR)/$(ASSETS)/cacert.pem" "$(ROMFS_ABS)/assets/"; fi
-	@cp -f  "$(GTA_SRC)/catalog.json" "$(ROMFS_ABS)/gta/"
-	@cp -rf "$(GTA_SRC)/stations"     "$(ROMFS_ABS)/gta/"
-	@cp -rf "$(GTA_SRC)/games"        "$(ROMFS_ABS)/gta/"
+	@if [ -f "$(GTA_SRC)/catalog.json" ]; then cp -f "$(GTA_SRC)/catalog.json" "$(ROMFS_ABS)/gta/"; fi
+	@test -f "$(ROMFS_ABS)/gta/catalog.json" || { echo "ERROR: gta/catalog.json not found (assets/gta or romfs/gta)"; exit 1; }
+	@if [ -d "$(GTA_SRC)/stations" ]; then cp -rf "$(GTA_SRC)/stations/." "$(ROMFS_ABS)/gta/stations/"; fi
+	@if [ -d "$(GTA_SRC)/games" ];    then cp -rf "$(GTA_SRC)/games/."    "$(ROMFS_ABS)/gta/games/";    fi
 	@for f in change-station-sa.mp3 change-station-vc.mp3; do \
 		if [ -f "$(GTA_SRC)/sfx/$$f" ]; then cp -f "$(GTA_SRC)/sfx/$$f" "$(ROMFS_ABS)/gta/sfx/"; fi; \
 	done
@@ -103,9 +103,10 @@ endif
 	@du -sh "$(ROMFS_ABS)/assets" "$(ROMFS_ABS)/gta" 2>/dev/null || true
 	@du -sh "$(ROMFS_ABS)" 2>/dev/null || true
 
+# romfs НЕ удаляем — там рабочие ассеты (иконки GTA VI и т.д.)
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(ROMFS) $(TARGET).nro $(TARGET).nacp $(TARGET).elf $(TARGET).map
+	@rm -fr $(BUILD) $(TARGET).nro $(TARGET).nacp $(TARGET).elf $(TARGET).map
 
 else
 

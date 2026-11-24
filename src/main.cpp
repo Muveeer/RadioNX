@@ -1283,13 +1283,19 @@ struct Audio {
         bool mute=a->sfx.muted.load();
         float vol=mute?0.f:p->volume.load()*a->fade.load();
         bool pull=p->run.load()&&!p->paused.load()&&!mute&&!p->ring.empty();
+        int32_t ml=0;
         for(int i=0;i<n;i++){
             int16_t s=0;
             if(pull&&p->used>=2){
                 s=(int16_t)(p->ring[p->tail]|(p->ring[p->tail+1]<<8));
                 p->tail=(p->tail+2)%p->ring.size(); p->used-=2;
             }
-            if((i&1)==0&&!p->mon.empty()){ p->mon[p->monPos]=s; p->monPos=(p->monPos+1)%p->mon.size(); }
+            // монитор: (L+R)/2 на 24 кГц — точная база для FFT
+            if((i&1)==0)ml=s;
+            else if(!p->mon.empty()){
+                p->mon[p->monPos]=(int16_t)((ml+(int32_t)s)>>1);
+                p->monPos=(p->monPos+1)%p->mon.size();
+            }
             o[i]=(int16_t)(s*vol);
         }
         a->sfx.mix(o,n/2,Player::RATE);
@@ -1324,6 +1330,7 @@ struct Globe {
     bool selPt=false; Vec3 selV{0,0,0}; Vec2 selP{0,0}; float selZ=-1.f;
     float idle=0,flyYaw=0,flyPitch=0,zoomIdle=0,sunTimer=0,selGlow=0;
     bool dragging=false,flying=false,locked=false,moving=false;
+    float dotFade=1.f;
     float cy=1,sy=0,cp=1,sp=0;
     static constexpr float DEF_R=285.f;
     static constexpr float HOME_R=980.f, HOME_CX=640.f, HOME_CY=1450.f;
@@ -1612,8 +1619,7 @@ struct Globe {
         } else yawV=pitchV=0;
         Vec2 ct=home?Vec2{HOME_CX,HOME_CY}:(zen?centerZen:centerHome);
         float ck=1-powf(.004f,dt);
-        center.x=lerpf(center.x,ct.x,ck);
-        center.y=lerpf(center.y,ct.y,ck);
+        if(!locked){ center.x=lerpf(center.x,ct.x,ck); center.y=lerpf(center.y,ct.y,ck); }
         moving=dragging||flying||home||yawV!=0||pitchV!=0||fabsf(R-targetR)>=.4f
                ||fabsf(center.x-ct.x)>.4f||fabsf(center.y-ct.y)>.4f;
         selGlow=lerpf(selGlow,(selected>=0||selPt)?1.f:0.f,1-powf(.02f,dt));
@@ -1727,7 +1733,7 @@ struct Globe {
     for(int k=0;k<LITN;k++)core[k].clear();
     for(int k=0;k<HALON;k++){halo1[k].clear();halo2[k].clear();}
     float zs=clampf(sqrtf(R/DEF_R),.8f,2.f);
-    if(places){
+    if(places&&dotFade>.01f){
         for(int idx:order){
             if(idx<0||(size_t)idx>=pz.size())continue;
             if(pz[idx]<=.03f)continue;
@@ -1760,19 +1766,19 @@ struct Globe {
     for(int k=1;k<HALON;k++){
         if(halo2[k].empty())continue;
         float a=(float)k/(float)(HALON-1);
-        SDL_SetRenderDrawColor(r,255,186,110,(Uint8)(20.f*a+.5f));
+        SDL_SetRenderDrawColor(r,255,186,110,(Uint8)((20.f*a+.5f)*dotFade));
         SDL_RenderFillRects(r,halo2[k].data(),(int)halo2[k].size());
     }
     for(int k=1;k<HALON;k++){
         if(halo1[k].empty())continue;
         float a=(float)k/(float)(HALON-1);
-        SDL_SetRenderDrawColor(r,255,214,150,(Uint8)(46.f*a+.5f));
+        SDL_SetRenderDrawColor(r,255,214,150,(Uint8)((46.f*a+.5f)*dotFade));
         SDL_RenderFillRects(r,halo1[k].data(),(int)halo1[k].size());
     }
     for(int k=0;k<LITN;k++){
         if(core[k].empty())continue;
         SDL_Color c=litRamp((float)k/(float)(LITN-1));
-        SDL_SetRenderDrawColor(r,c.r,c.g,c.b,232);
+        SDL_SetRenderDrawColor(r,c.r,c.g,c.b,(Uint8)(232.f*dotFade));
         SDL_RenderFillRects(r,core[k].data(),(int)core[k].size());
     }
     b.flush(r);
@@ -1970,10 +1976,22 @@ struct GtaStation{ std::string mount,game,name,genre,title,url; int listeners=0,
 struct GtaRes{ bool ok=false; std::string err; std::vector<GtaStation> v; };
 struct GtaGameDef{ const char* key; const char* label; float hue; };
 static const GtaGameDef GTA_GAMES[]={
-    {"5","GTA V",200.f},{"4","GTA IV",38.f},{"sa","San Andreas",95.f},{"vc","Vice City",322.f},
-    {"vcs","Vice City Stories",286.f},{"lcs","Liberty City Stories",176.f},{"3","GTA III",210.f}
+{"6","GTA VI",318.f},
+{"5","GTA V",200.f},{"4","GTA IV",38.f},{"sa","San Andreas",95.f},{"vc","Vice City",322.f},
+{"vcs","Vice City Stories",286.f},{"lcs","Liberty City Stories",176.f},{"3","GTA III",210.f}
 };
-static const int GTA_NG=7;
+static const int GTA_NG=8;
+struct GtaGradDef{ float h[4],s[4],v[4]; };
+static const GtaGradDef GTA_GRAD[GTA_NG]={
+{{318,286,196,335},{.72f,.66f,.58f,.68f},{1.f,.95f,.95f,1.f}},   // VI
+{{205,186,224,168},{.75f,.70f,.55f,.45f},{1.f,1.f,.95f,.90f}},   // V
+{{ 36, 22, 48,210},{.80f,.75f,.65f,.35f},{1.f,.95f,.90f,.80f}},  // IV
+{{100, 48, 26,140},{.70f,.80f,.75f,.50f},{.95f,1.f,.95f,.85f}},  // SA
+{{322,190,278,335},{.80f,.75f,.65f,.70f},{1.f,1.f,.95f,1.f}},    // VC
+{{286,320,214,262},{.70f,.75f,.60f,.55f},{1.f,1.f,.95f,.90f}},   // VCS
+{{176,208,192,230},{.65f,.60f,.55f,.45f},{.95f,.90f,.90f,.85f}}, // LCS
+{{212,236,198,250},{.65f,.55f,.50f,.40f},{.90f,.85f,.90f,.80f}}  // III
+};
 static std::string gtaNormGame(std::string g){ return lowerStr(g); }
 static int gtaGameIdx(const std::string& g){
     std::string k=gtaNormGame(g);
@@ -2217,6 +2235,67 @@ static const GtaVSrc* gtaVSrc(const std::string& slug){
     for(auto& s:GTA_V_SRC)if(slug==s.slug)return &s;
     return nullptr;
 }
+
+static const char* IA_VI="http://ia600809.us.archive.org/6/items/gta-6-radio-audio-bk-20261124-v2/";
+
+static const GtaVDef GTA_VI[]={
+{"afrobank-fm","AfroBank FM","Afrobeats · amapiano"},
+{"back-country-radio","Back Country Radio","Country"},
+{"circoloco-records-radio","CircoLoco Records Radio","House · techno"},
+{"cocoteo-fm","Cocoteo FM","Reggaeton · Latin"},
+{"dirty-south-classics","Dirty South Classics","Southern hip-hop"},
+{"emotion-98-3","Emotion 98.3","Soft rock · ballads"},
+{"flash-fm","Flash FM","Pop"},
+{"gloriana-blues-radio","Gloriana Blues Radio","Blues"},
+{"honey-fm","Honey FM","R&B · soul"},
+{"kaleidoscope-fm","Kaleidoscope FM","International · covers"},
+{"leonida-jazz-radio","Leonida Jazz Radio","Jazz fusion"},
+{"radio-la-ola","Radio La Ola","Salsa · Latin classics"},
+{"radio-on-u","Radio On-U","Dub · reggae"},
+{"stockyard-fm","Stockyard FM","Indie dance · electronic"},
+{"symphony-fm","Symphony FM","Classical"},
+{"the-chamber-106-6","The Chamber 106.6","Heavy metal"},
+{"the-vault-radio","The Vault Radio","Underground house · techno"},
+{"the-wipe","The Wipe","Talk"},
+{"thrillbilly-mud-club-radio","Thrillbilly Mud Club Radio","Nu metal · rock"},
+{"v-rock","V-Rock","Classic rock"},
+{"vcrr","VCRR","Hip-hop · trap"},
+{"vice-city-fm","Vice City FM","80s pop · new wave"},
+{"wktt","WKTT","Talk"},
+{"worldwide-fm","Worldwide FM","Jazz · soul · global"}
+};
+
+static const GtaVSrc GTA_VI_SRC[]={
+{"afrobank-fm",IA_VI,"GTA 6 - AfroBank FM  Full Radio Station (31 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,8754},
+{"back-country-radio",IA_VI,"GTA 6 - Back Country Radio  Full Radio Station (24 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,5064},
+{"circoloco-records-radio",IA_VI,"GTA 6 - Circoloco Records Radio Full Radio Station (27 Songs).mp3",nullptr,nullptr,6444},
+{"cocoteo-fm",IA_VI,"GTA 6 - Cocoteo FM  Full Radio Station (30 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,6548},
+{"dirty-south-classics",IA_VI,"GTA 6 - Dirty South Classics  Full Radio Station (39 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,10453},
+{"emotion-98-3",IA_VI,"GTA 6 - Emotion 98.3  Full Radio Station (34 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,10961},
+{"flash-fm",IA_VI,"GTA 6 - Flash FM  Full Radio Station (80 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,20702},
+{"gloriana-blues-radio",IA_VI,"GTA 6 - Gloriana Blues Radio  Full Radio Station (23 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,5383},
+{"honey-fm",IA_VI,"GTA 6 - Honey FM  Full Radio Station (55 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,19777},
+{"kaleidoscope-fm",IA_VI,"GTA 6 - Kaleidoscope FM  Full Radio Station (18 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,5265},
+{"leonida-jazz-radio",IA_VI,"GTA 6 - Leonida Jazz Radio  Full Radio Station (36 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,10784},
+{"radio-la-ola",IA_VI,"GTA 6 - Radio La Ola  Full Radio Station (25 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,7852},
+{"radio-on-u",IA_VI,"GTA 6 - Radio On-U  Full Radio Station (16 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,3005},
+{"stockyard-fm",IA_VI,"GTA 6 - Stockyard FM  Full Radio Station (37 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,9492},
+{"symphony-fm",IA_VI,"GTA 6 - Symphony FM  Full Radio Station (16 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,8230},
+{"the-chamber-106-6",IA_VI,"GTA 6 - The Chamber 106.6  Full Radio Station (22 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,6641},
+{"the-vault-radio",IA_VI,"GTA 6 - The Vault Radio  Full Radio Station (23 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,5015},
+{"the-wipe",IA_VI,"GTA 6 - The Wipe  Full Radio Station - GTA 6 Radio.mp3",nullptr,nullptr,12019},
+{"thrillbilly-mud-club-radio",IA_VI,"GTA 6 - Thrillbilly Mud Club Radio  Full Radio Station (20 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,5021},
+{"v-rock",IA_VI,"GTA 6 - V-Rock  Full Radio Station (69 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,19235},
+{"vcrr",IA_VI,"GTA 6 - VCRR  Full Radio Station (80 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,16107},
+{"vice-city-fm",IA_VI,"GTA 6 - Vice City FM  Full Radio Station (72 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,22136},
+{"wktt",IA_VI,"GTA 6 - WKTT  Full Radio Station - GTA 6 Radio.mp3",nullptr,nullptr,6306},
+{"worldwide-fm",IA_VI,"GTA 6 - Worldwide FM  Full Radio Station (39 Songs) - GTA 6 Radio.mp3",nullptr,nullptr,7232}
+};
+
+static const GtaVSrc* gtaVISrc(const std::string& slug){
+    for(auto& s:GTA_VI_SRC)if(slug==s.slug)return &s;
+    return nullptr;
+}
 struct IaMeta{ int64_t size=0,len=0; };
 static std::mutex gIaMtx;
 static std::map<std::string,std::string> gIaBase;
@@ -2305,9 +2384,14 @@ static void iaLoad(){
     std::lock_guard<std::mutex> lk(gIaMtx);
     gIaReady=!gIaBase.empty();
 }
+static bool iaHasVI(){
+    std::lock_guard<std::mutex> lk(gIaMtx);
+    return gIaBase.count("gta-6-radio-audio-bk-20261124-v2")>0;
+}
 static void iaFetch(){
     if(gIaBusy.exchange(true))return;
-    const char* items[]={"Radio-files-pause-menu","radio-for-my-website-mako","gta-5-radio-songs_202603"};
+    const char* items[]={"Radio-files-pause-menu","radio-for-my-website-mako",
+                         "gta-5-radio-songs_202603","gta-6-radio-audio-bk-20261124-v2"};
     for(const char* it:items){
         std::string err;
         std::string body=httpGet(std::string("https://archive.org/metadata/")+it,err,12,false,true,UA_APP);
@@ -2322,8 +2406,10 @@ static int64_t gtaVPhase(const std::string& mount){ return (int64_t)(pcHash(moun
 
 static bool gtaVCandidates(const std::string& mount,std::vector<std::string>& urls,
                            std::vector<int64_t>& offs,std::vector<int64_t>& secs,int64_t& durOut){
-    if(mount.rfind("5/",0)!=0)return false;
-    const GtaVSrc* s=gtaVSrc(mount.substr(2)); if(!s)return false;
+    const GtaVSrc* s=nullptr;
+    if(mount.rfind("5/",0)==0)s=gtaVSrc(mount.substr(2));
+    else if(mount.rfind("6/",0)==0)s=gtaVISrc(mount.substr(2));
+    if(!s)return false;
     int64_t now=(int64_t)time(nullptr)+gtaVPhase(mount);
     durOut=s->seconds;
     auto add=[&](const char* base,const char* file){
@@ -2603,6 +2689,7 @@ static uint32_t pcHash(const std::string& s){
     for(unsigned char ch:s){h^=ch;h*=16777619u;}
     return h;
 }
+#include "gta_world.h"
 struct Card {
     std::string id,city,country,cc,photoUrl;
     float lat=0,lon=0;
@@ -3346,10 +3433,13 @@ std::map<std::string,Uint32> flagUse;
     std::vector<int> gtaRows;
     struct GtaFx2{float lift=0,liftV=0,sc=.92f,scV=0,glow=0,ph=0;} gtaFx2[GTA_NG];
     bool gtaFxInit=false;
+    GtaWorld gtaWorld;
     struct GtaTx2{SDL_Texture* tex=nullptr;int w=0,h=0;Uint32 use=0;};
     std::map<std::string,GtaTx2> gtaTx2;
     std::set<std::string> gtaTx2Miss;
     std::string gtaNowMount;
+    float gtaGradF[4][3]={{0}}; bool gtaGradInit=false;
+    float gtaAuraPulse=0, gtaAuraEnergy=0, gtaAuraSpin=0, gtaAuraTint=0, gtaAuraTintT=0;
     HomeMenu home; bool homeMode=true; float homeMix=1.f;
     bool minusDown=false,plusDown=false,comboFired=false;
     Place curCity; CityRes cityRes; bool cityLoading=false; Place cityWant; bool cityWantSet=false;
@@ -3563,7 +3653,12 @@ std::map<std::string,Uint32> flagUse;
             st.name=v.name; st.genre=v.genre; st.url="";
             gta.push_back(st);
         }
-        gtaWorker.post([]{ iaLoad(); if(!gIaReady) iaFetch(); });
+        for(auto& v:GTA_VI){
+            GtaStation st; st.mount=std::string("6/")+v.slug; st.game="6";
+            st.name=v.name; st.genre=v.genre; st.url="";
+            gta.push_back(st);
+        }
+        gtaWorker.post([]{ iaLoad(); if(!gIaReady||!iaHasVI()) iaFetch(); });
         gtaReady=true;gtaRebuild();
     }
     void gtaRequest(){
@@ -3576,6 +3671,7 @@ std::map<std::string,Uint32> flagUse;
         int count=(int)gtaRows.size();if(count<=0)return;
         int next=gtaWrap(row);if(next==gtaSel)return;
         gtaSel=next;gtaWarmText(next);audio.sfx.trigger(Sfx::TICK);
+        gtaAuraPulse=std::max(gtaAuraPulse,.40f);
     }
     void gtaMove(int delta){gtaSetSel(gtaSel+delta);}
     void gtaEnterGame(int gi){
@@ -3603,20 +3699,16 @@ std::map<std::string,Uint32> flagUse;
         }
     }
     void gtaMoveCard(int dx,int dy){
-        int row=gtaPick/4,col=gtaPick%4;
-        int cols=row==1?3:4;
-        if(dx)col=(col+dx+cols)%cols;
-        if(dy){row=1-row;if(row==1&&col>2)col=2;}
-        int next=row*4+col;
-        if(next>=GTA_NG)next=GTA_NG-1;
+        int d=dy?dy:dx; if(!d)return;
+        int next=(gtaPick+d+GTA_NG)%GTA_NG;
         if(next!=gtaPick){gtaPick=next;audio.sfx.trigger(Sfx::TICK);}
     }
     void enterGta(){
         if(gtaMode)return;
         if(cleanMode)setClean(false);
         gtaMode=true;
-        if(!gIaReady&&!gIaBusy)gtaWorker.post([]{ iaLoad(); if(!gIaReady) iaFetch(); });
-        homeMode=false;home.latch=false;globe.home=false;globe.flying=false;
+        if(!gIaBusy)gtaWorker.post([]{ iaLoad(); if(!gIaReady||!iaHasVI()) iaFetch(); });
+        homeMode=false;home.latch=false;globe.home=true;globe.flying=false;
         screen=SCR_GLOBE;rebuildRows(false);
         gtaView=0;gtaViewMix=0;gtaPick=gtaGame;gtaCarDrag=false;
         gtaPoll=0;if(!gtaReady)gtaRequest();
@@ -3629,7 +3721,7 @@ std::map<std::string,Uint32> flagUse;
     void gtaPlayCore(const std::string& id,const std::string& title,const std::string& url,const std::string& place){
         std::string mount=id.rfind("gta:",0)==0?id.substr(4):"";
         std::string game=mount.substr(0,mount.find('/'));
-        const bool isV=(game=="5");
+        const bool isV=(game=="5"||game=="6");
         std::string stream=url;
         if(!isV&&stream.empty()&&!mount.empty())stream=std::string(GTA_AUDIO)+"/"+mount;
         if(!isV&&stream.empty()){toast("Stream URL missing",Pal::danger);return;}
@@ -3644,7 +3736,7 @@ std::map<std::string,Uint32> flagUse;
             if(stream.rfind("https://",0)==0)c.push_back("http://"+stream.substr(8));
         }
 
-        now=Now{id,title,place,"","GTA Radio","",stream,0.f,0.f,gtaLocalOffsetMin(),true,true};
+        now=Now{id,title,place,"","GTA Radio","",stream,0.f,0.f,gtaCityTzMin(gtaGameIdx(game)),true,true};
         nowGta=true;gtaNowMount=mount;
         failNotified=false;tuneAnim=0;nowWx=WxRes{};stLeave();
         globe.setSelected("");globe.setSelPoint(0,0,false);refreshClocks();
@@ -3657,6 +3749,8 @@ std::map<std::string,Uint32> flagUse;
         player.liveDur=isV?dur:0;
         player.livePhase=isV?gtaVPhase(mount):0;
         player.startList(c,offs,secs);
+        gtaAuraPulse=1.f;
+        gtaAuraTintT=(float)(pcHash(mount)%1000)/1000.f;
         if(screen==SCR_LIB&&libTab==LT_HIST)histView=player.hist();
     }
     void gtaPlay(int row){
@@ -3714,10 +3808,10 @@ std::map<std::string,Uint32> flagUse;
             for(auto& st:gta){int gi=gtaGameIdx(st.game);if(gi<GTA_NG)gtaCnt[gi]++;}
         }
         if(!gtaFxInit){gtaFxInit=true;for(int i=0;i<GTA_NG;i++)gtaFx2[i].ph=i*1.37f;}
-        gtaMix=lerpf(gtaMix,gtaMode?1.f:0.f,1-powf(.00004f,dt));
+        gtaMix=lerpf(gtaMix,gtaMode?1.f:0.f,1-powf(.004f,dt));
         if(gtaMode&&gtaMix>.995f)gtaMix=1.f;
         if(!gtaMode&&gtaMix<.005f)gtaMix=0.f;
-        gtaViewMix=lerpf(gtaViewMix,gtaView?1.f:0.f,1-powf(.00002f,dt));
+        gtaViewMix=lerpf(gtaViewMix,gtaView?1.f:0.f,1-powf(.002f,dt));
         if(gtaView&&gtaViewMix>.995f)gtaViewMix=1.f;
         if(!gtaView&&gtaViewMix<.005f)gtaViewMix=0.f;
         for(int i=0;i<GTA_NG;i++){
@@ -3727,6 +3821,10 @@ std::map<std::string,Uint32> flagUse;
             HomeMenu::spring(f.sc,f.scV,selected?1.06f:.92f,150.f,4e-5f,dt);
             f.glow=lerpf(f.glow,selected?1.f:0.f,1-powf(.0025f,dt));
         }
+        gtaGradUpdate(dt);
+        gtaAuraUpdate(dt);
+        gtaWorld.update(dt,gtaMix,easeOut(clampf(gtaViewMix,0.f,1.f)),
+                        gtaView==1?gtaGame:gtaPick,gtaMode,globe);
         int n=(int)gtaRows.size();
         if(n<=0){gtaCar=0;return;}
         while(gtaCar<0)gtaCar+=n;
@@ -3742,150 +3840,232 @@ std::map<std::string,Uint32> flagUse;
         }
     }
 
-    void drawGtaShelf2(float amount){
-        if(amount<.01f)return;
-        auto AL=[&](int value){return (int)clampf(value*amount,0.f,255.f);};
-        static std::vector<Vec2> outline;
-        const float cardW=170.f,cardH=170.f,depth=16.f;
-        for(int i=0;i<GTA_NG;i++){
-            const GtaGameDef& game=GTA_GAMES[i];GtaFx2& fx=gtaFx2[i];
-            bool available=gtaCnt[i]>0;int col=i%4,row=i/4;
-            float centerCol=row==1?1.f:1.5f;
-            float cx=640.f+(col-centerCol)*250.f,cy=205.f+row*252.f;
-            float bob=sinf(t*.8f+fx.ph)*(2.2f+2.f*fx.glow);
-            float yaw=(col<2?-.06f:.06f)+sinf(t*.4f+fx.ph)*.02f;
-            float pitch=(fx.glow>.5f?-.03f:.05f)+sinf(t*.6f+fx.ph)*.014f;
-            float scale=fx.sc;
-            if(fx.glow>.02f&&available)
-                HomeMenu::softEllipse(b,cx,cy+6,cardW*.80f*scale,cardH*.74f*scale,alpha(Pal::accent,(int)(46*fx.glow*amount)),24);
-            HomeMenu::softEllipse(b,cx+5,cy+cardH*.5f*scale+20,cardW*.42f*scale,8,alpha(C(0,0,0),AL(115)),20);
-            b.flush(ren);
-            HomeMenu::Xf xf;xf.set(cx,cy+bob+fx.lift,scale,pitch,yaw,sinf(t*.5f+fx.ph)*.012f);
-            HomeMenu::outline(cardW,cardH,16.f,outline);
-            int count=(int)outline.size();Vec2 front[32],back[32];
-            for(int q=0;q<count;q++){front[q]=xf.p(outline[q].x,outline[q].y,0.f);back[q]=xf.p(outline[q].x,outline[q].y,depth);}
-            Vec2 fc=xf.p(0,0,0.f),bc=xf.p(0,0,depth);
-            SDL_Color top=mixc(C(34,38,50),C(46,60,92),fx.glow*.55f);
-            SDL_Color bottom=mixc(C(13,15,21),C(16,22,38),fx.glow*.55f);
-            SDL_Color side=mixc(C(7,8,12),C(10,14,26),fx.glow*.5f);
-            {
-                int base=b.vert(bc.x,bc.y,alpha(side,AL(255))),first=-1,prev=-1;
-                for(int q=0;q<count;q++){
-                    int id=b.vert(back[q].x,back[q].y,alpha(side,AL(255)));
-                    if(first<0)first=id;
-                    if(prev>=0)b.tri(base,prev,id);
-                    prev=id;
-                }
-                b.tri(base,prev,first);
-            }
-            for(int q=0;q<count;q++){
-                int q2=(q+1)%count;
-                float shade=clampf(.5f-outline[q].y/cardH,0.f,1.f);
-                b.quad(front[q].x,front[q].y,front[q2].x,front[q2].y,back[q2].x,back[q2].y,back[q].x,back[q].y,
-                      alpha(mixc(side,C(26,30,42),shade*.55f),AL(255)));
-            }
-            {
-                int base=b.vert(fc.x,fc.y,alpha(mixc(top,bottom,.5f),AL(255))),ids[32];
-                for(int q=0;q<count;q++){
-                    float u=clampf(outline[q].y/cardH+.5f,0.f,1.f);
-                    ids[q]=b.vert(front[q].x,front[q].y,alpha(mixc(top,bottom,u),AL(255)));
-                }
-                for(int q=0;q<count;q++)b.tri(base,ids[q],ids[(q+1)%count]);
-            }
-            b.flush(ren);
-            int iw=(int)(cardW*scale*.94f),ih=(int)(cardH*scale*.94f);
-            SDL_Rect dst{(int)(fc.x-iw/2),(int)(fc.y-ih/2),iw,ih};
-            std::string cover=gtaCover2(game.key);
-            if(!cover.empty()){
-                gtaCoverFill(cover,dst,384,AL(255),available?255:96);
-                if(cover.find("_background")!=std::string::npos){
-                    std::string logo=gtaGLogo2(game.key);
-                    if(!logo.empty())gtaLogo(logo,SDL_Rect{(int)(fc.x-iw*.36f),(int)(fc.y-ih*.15f),(int)(iw*.72f),(int)(ih*.30f)},256,AL(255),available?255:110);
-                }
-            } else {
-                b.rrect2((float)dst.x,(float)dst.y,(float)dst.w,(float)dst.h,8,8,alpha(mixc(C(20,24,34),Pal::accent,.18f),AL(255)));
-                b.flush(ren);
-                txt(F30,upperStr(std::string(game.key)),(int)fc.x,(int)fc.y-16,alpha(Pal::accentSoft,AL(available?230:90)),true,1);
-            }
-            if(!available){
-                b.rrect2(fc.x-68,fc.y+ih*.5f-30,136,24,6,6,alpha(C(0,0,0),AL(190)));
-                b.flush(ren);
-                txt(F15,"COMING SOON",(int)fc.x,(int)(fc.y+ih*.5f-25),alpha(Pal::warm,AL(215)),true,1);
-            }
-            SDL_Color edge=mixc(alpha(Pal::wire,60),Pal::accentSoft,fx.glow*(available?1.f:.2f));
-            for(int q=0;q<count;q++){
-                int q2=(q+1)%count;
-                b.line(front[q].x,front[q].y,front[q2].x,front[q2].y,1.6f,alpha(edge,AL(200)));
-            }
-            b.flush(ren);
-            hit(H_GTA_GAME,(int)(cx-cardW*.5f*scale),(int)(cy-cardH*.5f*scale),(int)(cardW*scale),(int)(cardH*scale),i);
+    void gtaGradSnap(){
+        int gi=gtaView==1?gtaGame:gtaPick;
+        if(gi<0||gi>=GTA_NG)gi=0;
+        const GtaGradDef& d=GTA_GRAD[gi];
+        for(int i=0;i<4;i++){
+            SDL_Color c=hsv(d.h[i],d.s[i],d.v[i]);
+            gtaGradF[i][0]=(float)c.r;gtaGradF[i][1]=(float)c.g;gtaGradF[i][2]=(float)c.b;
         }
     }
-    void drawGtaCarousel(float amount){
+    void gtaGradUpdate(float dt){
+        if(!gtaGradInit){gtaGradInit=true;gtaGradSnap();}
+        int gi=gtaView==1?gtaGame:gtaPick;
+        if(gi<0||gi>=GTA_NG)gi=0;
+        const GtaGradDef& d=GTA_GRAD[gi];
+        float k=1-powf(.045f,dt);
+        for(int i=0;i<4;i++){
+            SDL_Color tgt=hsv(d.h[i],d.s[i],d.v[i]);
+            gtaGradF[i][0]=lerpf(gtaGradF[i][0],(float)tgt.r,k);
+            gtaGradF[i][1]=lerpf(gtaGradF[i][1],(float)tgt.g,k);
+            gtaGradF[i][2]=lerpf(gtaGradF[i][2],(float)tgt.b,k);
+        }
+    }
+    SDL_Color gtaAuraCol(float u,float a){
+        float f=fmodf(u,1.f); if(f<0)f+=1.f; f*=4.f;
+        int i0=((int)f)&3, i1=(i0+1)&3;
+        float t=f-floorf(f); t=t*t*(3.f-2.f*t);
+        return C((int)lerpf(gtaGradF[i0][0],gtaGradF[i1][0],t),
+                 (int)lerpf(gtaGradF[i0][1],gtaGradF[i1][1],t),
+                 (int)lerpf(gtaGradF[i0][2],gtaGradF[i1][2],t),
+                 (int)clampf(a,0.f,255.f));
+    }
+
+    void gtaAuraUpdate(float dt){
+        float e=0;
+        for(int i=0;i<NB;i++) e+=eq[i]*(i<12?1.3f:.65f);   // низы весят больше
+        e=clampf(e/(float)NB*2.1f,0.f,1.f);
+        float k=1-powf(e>gtaAuraEnergy?.0004f:.015f,dt);   // быстрая атака, мягкий спад
+        gtaAuraEnergy=lerpf(gtaAuraEnergy,e,k);
+        gtaAuraPulse=std::max(0.f,gtaAuraPulse-dt*1.5f);
+        gtaAuraSpin+=dt*(.055f+.22f*gtaAuraEnergy);        // переливание крутится от бита
+        gtaAuraTint=lerpf(gtaAuraTint,gtaAuraTintT,1-powf(.02f,dt));
+    }
+
+    void gtaAura(float amount){
         if(amount<.01f)return;
-        int count=(int)gtaRows.size();
-        const float centerX=640.f,centerY=296.f,spacing=330.f,baseW=360.f,baseH=320.f;
-        if(count<=0){Icon::spinner(b,centerX,centerY,20,t*4,alpha(Pal::accent,(int)(200*amount)));b.flush(ren);return;}
-        for(int pass=0;pass<2;pass++){
-            for(int i=0;i<count;i++){
-                float delta=(float)i-gtaCar;
-                while(delta>count*.5f)delta-=count;
-                while(delta<-count*.5f)delta+=count;
-                float distance=fabsf(delta);
-                if(distance>2.55f)continue;
-                bool center=distance<=.5f;
-                if(pass==0?!center:center)continue;
-                float sign=delta<0?-1.f:1.f;
-                float k=distance<=1.f?distance:1.f+(distance-1.f)*.72f;
-                float x=centerX+sign*k*spacing;
-                float scale=distance<=1.f?lerpf(1.f,.52f,distance):lerpf(.52f,.30f,clampf(distance-1.f,0.f,1.f));
-                float opacity=distance<=1.f?lerpf(1.f,.46f,distance):lerpf(.46f,.16f,clampf(distance-1.f,0.f,1.f));
-                float brightness=distance<=1.f?lerpf(255.f,118.f,distance):lerpf(118.f,72.f,clampf(distance-1.f,0.f,1.f));
-                int width=(int)(baseW*scale),height=(int)(baseH*scale);
-                if(x+width*.5f<-40||x-width*.5f>W+40)continue;
-                SDL_Rect box{(int)(x-width*.5f),(int)(centerY-height*.5f),width,height};
-                const GtaStation& station=gta[gtaRows[i]];
-                gtaLogo(gtaLogoRel(station.mount),box,256,(int)(255*opacity*amount),(int)brightness);
-                hit(H_GTA_ROW,box.x,box.y,box.w,box.h,i);
+        bool on=nowGta&&player.state==Player::PLAYING;
+        float live=on?1.f:0.f, en=gtaAuraEnergy, pu=gtaAuraPulse;
+        float A=amount*(.30f+.70f*live)*(.60f+.40f*en)+amount*pu*.5f;
+        if(A<.012f)return;
+        const float cx=globe.center.x, cy=globe.center.y, R=std::max(1.f,globe.R);
+        const int NS=90;
+        float spin=gtaAuraSpin+gtaAuraTint;
+        auto seg=[&](float r0,float r1,float u0,float u1,float a0,float a1,float t0,float t1){
+            float c0=cosf(t0),s0=sinf(t0),c1=cosf(t1),s1=sinf(t1);
+            int p0=b.vert(cx+c0*r0,cy+s0*r0,gtaAuraCol(u0,a0));
+            int p1=b.vert(cx+c1*r0,cy+s1*r0,gtaAuraCol(u1,a0));
+            int p2=b.vert(cx+c1*r1,cy+s1*r1,gtaAuraCol(u1,a1));
+            int p3=b.vert(cx+c0*r1,cy+s0*r1,gtaAuraCol(u0,a1));
+            b.tri(p0,p1,p2); b.tri(p0,p2,p3);
+        };
+        for(int k=0;k<3;k++){                              // мягкое гало наружу
+            float r0=R*(1.004f+.010f*k);
+            float r1=R*(1.045f+.070f*k+.055f*en+.070f*pu);
+            float a0=A*(46.f-12.f*k);
+            for(int i=0;i<NS;i++){
+                float t0=2*(float)M_PI*i/NS, t1=2*(float)M_PI*(i+1)/NS;
+                seg(r0,r1,(float)i/NS+spin,(float)(i+1)/NS+spin,a0,0.f,t0,t1);
             }
         }
-        float fraction=fabsf(gtaCar-floorf(gtaCar+.5f));
-        int textAlpha=(int)(255*clampf(1.f-fraction*2.f,0.f,1.f)*amount);
-        if(textAlpha>2&&gtaSel>=0&&gtaSel<count){
-            const GtaStation& station=gta[gtaRows[gtaSel]];
-            txt(F30,trunc(F30,station.name,780,true),(int)centerX,505,alpha(Pal::text,textAlpha),true,1);
-            txt(F17,trunc(F17,station.genre,780),(int)centerX,548,alpha(Pal::dim,(int)(textAlpha*.82f)),false,1);
-            if(nowGta&&gtaNowMount==station.mount){
-                bool live=player.state==Player::PLAYING;float pulse=.5f+.5f*sinf(t*3.f);
-                int dotAlpha=(int)(textAlpha*(live?(.55f+.45f*pulse):.45f));
-                b.circle(centerX,588,3.6f,alpha(live?Pal::live:Pal::faint,dotAlpha),8);b.flush(ren);
+        b.flush(ren);
+        {                                                  // яркая кромка
+            float r0=R, r1=R*(1.014f+.006f*en), a0=A*(120.f+90.f*en);
+            for(int i=0;i<NS;i++){
+                float t0=2*(float)M_PI*i/NS, t1=2*(float)M_PI*(i+1)/NS;
+                seg(r0,r1,(float)i/NS+spin,(float)(i+1)/NS+spin,a0,a0*.55f,t0,t1);
             }
+            b.flush(ren);
+        }
+        if(live>.01f){                                     // радиальный эквалайзер
+            const int BARS=72;
+            for(int i=0;i<BARS;i++){
+                float u=(float)i/BARS;
+                float m=fabsf(u*2.f-1.f);                  // зеркальный спектр
+                int bi=(int)(m*(NB-1)); if(bi<0)bi=0; if(bi>NB-1)bi=NB-1;
+                float v=eq[bi]*live; if(v<.02f)continue;
+                float t0=u*2*(float)M_PI-(float)M_PI*.5f;
+                float half=(2*(float)M_PI/BARS)*.34f;
+                float r0=R*1.016f, r1=r0+R*(.010f+.085f*v);
+                float a=A*(60.f+165.f*v);
+                seg(r0,r1,u+spin,u+spin,a,a*.15f,t0-half,t0+half);
+            }
+            b.flush(ren);
+        }
+        if(pu>.01f){                                       // вспышка при переключении
+            float p=1.f-pu;
+            float r0=R*(1.01f+.20f*p), r1=r0+R*.035f*(1.f-p);
+            float a=amount*pu*pu*150.f;
+            for(int i=0;i<NS;i++){
+                float t0=2*(float)M_PI*i/NS, t1=2*(float)M_PI*(i+1)/NS;
+                seg(r0,r1,(float)i/NS+spin,(float)(i+1)/NS+spin,a,0.f,t0,t1);
+            }
+            b.flush(ren);
+        }
+    }
+
+    void gtaMap(float amount,float view){
+        float a=amount*lerpf(1.f,.82f,view);
+        if(a<.02f)return;
+        int gi=gtaView==1?gtaGame:gtaPick;
+        SDL_Color acc=hsv(GTA_GAMES[gi].hue,.45f,.98f);
+        gtaWorld.drawCities(ren,b,globe,t,a,gtaWorld.dot,acc);
+        for(int i=0;i<3;i++){
+            Vec2 s; if(!gtaWorld.cityScreen(globe,i,s))continue;
+            bool on=(i==gtaWorld.dot);
+            int al=(int)(a*(on?240:125));
+            txt(on?F17:F15,GTA_USA[i].name,(int)(s.x+18),(int)(s.y-(on?10:8)),
+                alpha(on?Pal::text:Pal::dim,al),on);
+        }
+    }
+    void gtaPanelHead(float amount,float view){
+        const float RX=796.f,RW=448.f;
+        int A=(int)(235*amount);
+        if(view<.5f){
+            txt(F24,"GTA RADIO",(int)RX,26,alpha(Pal::text,A),true);
+        } else {
+            std::string lg=gtaGLogo2(GTA_GAMES[gtaGame].key);
+            if(!lg.empty())gtaLogo(lg,SDL_Rect{(int)RX,20,220,44},256,A,255);
+            else txt(F24,upperStr(gtaGameLabel(GTA_GAMES[gtaGame].key)),(int)RX,26,alpha(Pal::text,A),true);
+        }
+        b.line(RX,84.f,RX+RW,84.f,1.f,alpha(Pal::wire,(int)(16*amount)));
+        b.flush(ren);
+    }
+    void gtaWorlds(float amount){
+        if(amount<.01f)return;
+        float vw=easeOut(clampf(gtaViewMix,0.f,1.f));
+        const float RX=796.f,RW=448.f,RH=72.f,STEP=78.f,Y0=98.f;
+        for(int i=0;i<GTA_NG;i++){
+            const GtaGameDef& game=GTA_GAMES[i]; GtaFx2& fx=gtaFx2[i];
+            bool avail=gtaCnt[i]>0;
+            float st=easeOut(clampf((gtaWorld.enterT-.05f*i)/.5f,0.f,1.f));
+            float a=amount*st; if(a<.02f)continue;
+            int A=(int)(255*a);
+            float x=RX+fx.lift*.7f+(1.f-st)*26.f;
+            float y=Y0+i*STEP-vw*18.f;
+            SDL_Color own=hsv(game.hue,.55f,.95f);
+            if(fx.glow>.01f){
+                b.rrect2(x,y,RW,RH,10.f,8.f,alpha(Pal::wire,(int)(11*fx.glow*a)));
+                b.flush(ren);
+                b.rrect2(x,y+10.f,3.f,RH-20.f,1.5f,1.5f,alpha(own,(int)(230*fx.glow*a)));
+                b.flush(ren);
+            }
+            int bright=(int)(lerpf(96.f,255.f,fx.glow)*(avail?1.f:.45f));
+            std::string lg=gtaGLogo2(game.key);
+            float ls=lerpf(.94f,1.f,fx.glow);
+            int lw=(int)(210*ls),lh=(int)(52*ls);
+            if(!lg.empty())gtaLogo(lg,SDL_Rect{(int)(x+20),(int)(y+RH*.5f-lh*.5f),lw,lh},256,A,bright);
+            else txt(F20,upperStr(game.label),(int)(x+20),(int)(y+RH*.5f-12),alpha(Pal::text,A),true);
+            GtaCityDef c=gtaCity(i);
+            int tx=(int)(x+248);
+            bool bold=fx.glow>.5f;
+            txt(F20,trunc(F20,c.city,(int)(RW-268),bold),tx,(int)(y+RH*.5f-12),
+                alpha(mixc(Pal::dim,Pal::text,fx.glow),A),bold);
+            if(vw<.5f)hit(H_GTA_GAME,(int)RX,(int)y,(int)RW,(int)RH,i);
+        }
+    }
+    void gtaStations(float amount){
+        if(amount<.01f)return;
+        float vw=easeOut(clampf(gtaViewMix,0.f,1.f));
+        int n=(int)gtaRows.size();
+        const float CX=1020.f,CY=350.f,SP=170.f,BW=232.f,BH=200.f;
+        float slide=(1.f-vw)*18.f;
+        if(n<=0){
+            Icon::spinner(b,CX,CY+slide,18,t*4,alpha(Pal::accent,(int)(200*amount)));
+            b.flush(ren);
+            return;
+        }
+        SDL_Rect clip{782,230,474,246};
+        SDL_RenderSetClipRect(ren,&clip);
+        clipOn=true; clipR=clip;
+        for(int pass=0;pass<2;pass++){
+            for(int i=0;i<n;i++){
+                float d=(float)i-gtaCar;
+                while(d>n*.5f)d-=n;
+                while(d<-n*.5f)d+=n;
+                float dist=fabsf(d); if(dist>2.3f)continue;
+                bool center=dist<=.5f; if(pass==0?center:!center)continue;
+                float sg=d<0?-1.f:1.f;
+                float k=dist<=1.f?dist:1.f+(dist-1.f)*.42f;
+                float x=CX+sg*k*SP;
+                float sc=dist<=1.f?lerpf(1.f,.48f,dist):.48f;
+                float far=clampf(dist-1.f,0.f,1.3f)/1.3f;
+                float op=dist<=1.f?lerpf(1.f,.34f,dist):lerpf(.34f,.12f,far);
+                int br=(int)(dist<=1.f?lerpf(255.f,104.f,dist):lerpf(104.f,64.f,far));
+                int w=(int)(BW*sc),h=(int)(BH*sc);
+                SDL_Rect box{(int)(x-w*.5f),(int)(CY+slide-h*.5f),w,h};
+                gtaLogo(gtaLogoRel(gta[gtaRows[i]].mount),box,256,(int)(255*op*amount),br);
+                if(vw>.5f)hit(H_GTA_ROW,box.x,box.y,box.w,box.h,i);
+            }
+        }
+        SDL_RenderSetClipRect(ren,nullptr); clipOn=false;
+        float fr=fabsf(gtaCar-floorf(gtaCar+.5f));
+        int ta=(int)(255*clampf(1.f-fr*2.f,0.f,1.f)*amount);
+        if(ta>2&&gtaSel>=0&&gtaSel<n){
+            const GtaStation& s=gta[gtaRows[gtaSel]];
+            txt(F24,trunc(F24,s.name,452,true),(int)CX,(int)(476+slide),alpha(Pal::text,ta),true,1);
+            txt(F15,trunc(F15,s.genre,452),(int)CX,(int)(510+slide),alpha(Pal::dim,(int)(ta*.85f)),false,1);
+            bool live=nowGta&&gtaNowMount==s.mount&&player.state==Player::PLAYING;
+            float pl=.5f+.5f*sinf(t*3.f);
+            b.circle(CX,554.f+slide,3.6f,alpha(live?Pal::live:Pal::faint,(int)(ta*(live?.6f+.4f*pl:.45f))),8);
+            b.flush(ren);
         }
     }
     void drawGta(){
-        float amount=easeOut(gtaMix);if(amount<.004f)return;
+        float amount=easeOut(gtaMix); if(amount<.004f)return;
         float view=easeOut(clampf(gtaViewMix,0.f,1.f));
         SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(ren,0,0,0,(Uint8)(255*amount));
-        SDL_Rect full{0,0,W,H};SDL_RenderFillRect(ren,&full);
-        float shelfAmount=amount*(1.f-view);
-        if(shelfAmount>.01f){
-            b.gradRect(0,0,W,H*.75f,alpha(C(18,24,58),(int)(70*shelfAmount)),alpha(C(0,0,0),0));
-            b.flush(ren);
+        int dim=(int)(112.f*view*amount);
+        if(dim>0){
+            SDL_SetRenderDrawColor(ren,0,0,0,(Uint8)dim);
+            SDL_Rect full{0,0,W,H}; SDL_RenderFillRect(ren,&full);
         }
-        if(view<.995f)drawGtaShelf2(shelfAmount);
-        if(view>.005f)drawGtaCarousel(amount*view);
-        if(now.valid&&amount>.02f){
-            int a=(int)(235*amount);
-            bool live=player.state==Player::PLAYING;
-            float pulse=.5f+.5f*sinf(t*3.f);
-            int dotA=live?(int)(a*(.6f+.4f*pulse)):(int)(a*.7f);
-            b.circle(30,H-30,3.5f,alpha(live?Pal::live:Pal::faint,dotA),8); b.flush(ren);
-            std::string src=nowGta?gtaGameLabel(gtaNowMount.substr(0,gtaNowMount.find('/')))
-                                  :(now.place.empty()?now.country:now.place);
-            if(!src.empty())txt(F15,trunc(F15,src,360),44,H-62,alpha(Pal::faint,(int)(a*.85f)));
-            txt(F17,trunc(F17,now.title,360),44,H-40,alpha(Pal::dim,a));
-        }
+        gtaAura(amount);
+        gtaMap(amount,view);
+        gtaPanelHead(amount,view);
+        if(view<.995f)gtaWorlds(amount*(1.f-view));
+        if(view>.005f)gtaStations(amount*view);
     }
 
     void setClean(bool on){
@@ -4303,7 +4483,7 @@ void pollAsync(){
             int count=(int)gtaRows.size();
             if(count>0){
                 if(!gtaCarDrag){gtaCarDrag=true;gtaCarStart=gtaCar;}
-                gtaCar-=dx/330.f;
+                gtaCar-=dx/158.f;
                 while(gtaCar<0)gtaCar+=count;
                 while(gtaCar>=count)gtaCar-=count;
             }
@@ -4493,7 +4673,7 @@ pc.sub="Open a keepsake of this city";
     player.volume=state.volume;
     audio.sfx.uiOn=state.uiSounds; audio.sfx.hissOn=state.pauseHiss;
     globe.places=&places; globe.buildGrid(); globe.initCache(ren);
-    buildBackground(); audio.open(&player);
+    buildBackground(); gtaWorld.init(ren); audio.open(&player);
     lblInit=R_SUCCEEDED(lblInitialize());
     logLine("init: services");
 
@@ -4588,32 +4768,43 @@ pc.sub="Open a keepsake of this city";
 }
     void updateEQ(float dt){
         if(player.state==Player::PLAYING){
-            if((eqTick++&1)==0){
-                static std::vector<int16_t> buf;
-                player.snapshot(buf);
-                static float re[1024],im[1024];
-                for(int i=0;i<1024;i++){ re[i]=buf[i]/32768.f*(.5f*(1-cosf(2*(float)M_PI*i/1023))); im[i]=0; }
-                fft(re,im,1024);
-                float db[NB],peak=-200;
-                for(int k=0;k<NB;k++){
-                    float f0=45*powf(310.f,k/(float)NB),f1=45*powf(310.f,(k+1)/(float)NB);
-                    int i0=std::max(1,(int)(f0*1024/48000)),i1=std::min(511,(int)(f1*1024/48000));
-                    if(i1<i0)i1=i0;
-                    float sum=0; int cnt=0;
-                    for(int i=i0;i<=i1;i++){ sum+=re[i]*re[i]+im[i]*im[i]; cnt++; }
-                    float d=20*log10f(sqrtf(sum/std::max(1,cnt))+1e-9f)+3.f*log2f(sqrtf(f0*f1)/120.f);
-                    db[k]=d; if(d>peak)peak=d;
-                }
-                eqPeak=peak>eqPeak?lerpf(eqPeak,peak,.5f):lerpf(eqPeak,peak,.03f);
-                float fl=eqPeak-46.f;
-                for(int k=0;k<NB;k++)eqT[k]=powf(clampf((db[k]-fl)/46.f,0.f,1.f),1.7f);
+            static std::vector<int16_t> buf;
+            player.snapshot(buf);
+            static float re[1024],im[1024];
+            for(int i=0;i<1024;i++){
+                re[i]=buf[i]/32768.f*(.5f*(1.f-cosf(2*(float)M_PI*i/1023.f)));
+                im[i]=0.f;
             }
+            fft(re,im,1024);
+            float db[NB],peak=-200.f;
+            for(int k=0;k<NB;k++){
+                float f0=42.f*powf(260.f,k/(float)NB);
+                float f1=42.f*powf(260.f,(k+1)/(float)NB);
+                // монитор 24 кГц — корректная привязка бинов
+                int i0=std::max(1,(int)(f0*1024.f/24000.f));
+                int i1=std::min(511,(int)(f1*1024.f/24000.f));
+                if(i1<i0)i1=i0;
+                float sum=0.f; int cnt=0;
+                for(int i=i0;i<=i1;i++){ sum+=re[i]*re[i]+im[i]*im[i]; cnt++; }
+                float d=20.f*log10f(sqrtf(sum/std::max(1,cnt))+1e-9f)
+                       +3.f*log2f(sqrtf(f0*f1)/120.f);
+                db[k]=d; if(d>peak)peak=d;
+            }
+            // пик: мгновенная атака, быстрое падение — полосы не зажаты
+            if(peak>eqPeak)eqPeak=peak;
+            else eqPeak=std::max(peak,eqPeak-30.f*dt);
+            float fl=eqPeak-42.f;
+            for(int k=0;k<NB;k++)
+                eqT[k]=powf(clampf((db[k]-fl)/42.f,0.f,1.f),1.35f);
         } else {
             for(auto& v:eqT)v=0.f;
-            eqPeak=lerpf(eqPeak,-70.f,1-powf(.5f,dt));
+            eqPeak=lerpf(eqPeak,-70.f,1.f-expf(-dt/.25f));
         }
-        float ka=1-powf(1e-6f,dt),kr=1-powf(.05f,dt);
-        for(int k=0;k<NB;k++)eq[k]=lerpf(eq[k],eqT[k],eqT[k]>eq[k]?ka:kr);
+        // атака ~12 мс — мгновенный прыжок вверх, спад ~70 мс — заметное падение
+        float ka=1.f-expf(-dt/.012f);
+        float kr=1.f-expf(-dt/.070f);
+        for(int k=0;k<NB;k++)
+            eq[k]=lerpf(eq[k],eqT[k],eqT[k]>eq[k]?ka:kr);
     }
     void killPlace(const std::string& id){
         if(id.empty()||deadPlaces.count(id))return;
@@ -6877,15 +7068,14 @@ void drawPanel(){
             b.line(ex,ey+eh+2,ex+ew,ey+eh+2,1,alpha(Pal::wire,10));
             for(int i=0;i<NB;i++){
                 float v=eq[i];
-                float br=live?(.5f+.5f*sinf(t*1.1f+i*.35f))*2.2f:0.f;
-                float bh=2.5f+br+v*eh;
+                float bh=2.5f+v*eh;
                 SDL_Color col=alpha(live?(v>.78f?Pal::accentSoft:Pal::accent):Pal::faint,215);
                 float bx=ex+i*bw+1.2f,by=ey+eh-bh,wi=bw-2.4f;
                 b.quad(bx,by,bx+wi,by,bx+wi,by+bh,bx,by+bh,col);
             }
             b.flush(ren);
         }
-float cy=y+250;
+        float cy=y+250;
         bool fv=isFav(now.chId);
         b.circle(x+44,cy,22,live?Pal::live:alpha(Pal::wire,18),18);
         b.ring(x+96,cy,18,1.3f,alpha(Pal::wire,26),16);
@@ -7040,8 +7230,9 @@ float cy=y+250;
         float nb=homeMode?1.f:(now.valid?((cachedHour<6.f||cachedHour>19.f)?1.f:0.f):0.f);
         float warm=(!homeMode&&now.valid)?(1.f-nb)*.6f:0.f;
         sky.draw(b,t,sinf(globe.yaw)*.5f,(cleanMode&&!homeMode)?1.f:nb); b.flush(ren);
-if(pcMix<.999f&&passportMix<.999f&&gtaMix<.999f)globe.draw(ren,b,t,W,H,warm);
-        if(gtaMix<.5f)stMapGlow();
+if(pcMix<.999f&&passportMix<.999f)globe.draw(ren,b,t,W,H,warm);
+        if(gtaMix<.06f&&nowGta&&!homeMode&&pcMix<.5f&&passportMix<.5f)gtaAura(.85f);
+        if(gtaMix<.06f)stMapGlow();
         if(hA>=.02f){ drawAurora(hA); drawHome(hA); }
         if(hA<.02f&&gtaMix<.01f&&!gtaMode&&!homeMode){
             if(cleanMode){
@@ -7290,6 +7481,7 @@ void run(){
     gtaWorker.stop();
     gtaImgWorker.stop();
     gtaFreeTx2();
+    gtaWorld.destroy();
     flagWorker[0].stop(); flagWorker[1].stop();
     player.stop();
     if(screenOff&&lblInit)lblSetCurrentBrightnessSetting(savedBrightness);
