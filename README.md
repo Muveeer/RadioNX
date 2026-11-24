@@ -98,7 +98,7 @@ Suggestions, feedback and bug reports are welcome through [GitHub Issues](https:
 ## Credits & Third-Party Sources
 
 - **[GTARadio.net](https://gtaradio.net)** — Source for GTA IV, GTA San Andreas, GTA Vice City, GTA Vice City Stories and other GTA radio streams used in RadioNX, excluding GTA V.
-- **GTA V Radio** — The RadioNX GTA V radio integration is original work by **Muveeer** and is not sourced from GTARadio.net.
+- **GTA V Radio, GTA VI Radio** — The RadioNX GTA V radio integration is original work by **Muveeer** and is not sourced from GTARadio.net.
 
 RadioNX is an independent project and is not affiliated with or endorsed by GTARadio.net, Rockstar Games or Take-Two Interactive.
 
